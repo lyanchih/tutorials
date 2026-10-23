@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agent 實戰全圖解：Skills、MCP、思考與 Token 變化互動實驗室</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 頂部導覽列 -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#hero" class="brand">
+        <span class="brand-icon">⚡</span>
+        <span class="brand-text">AI Flow <span class="brand-sub">互動教學實驗室</span></span>
+      </a>
+      <nav class="nav-links">
+        <a href="#concepts" class="nav-link">1. 秒懂核心角色</a>
+        <a href="#architecture" class="nav-link">2. 互動架構圖</a>
+        <a href="#token-simulator" class="nav-link highlight-link">3. Token 變化模擬器 🔥</a>
+        <a href="#sandbox" class="nav-link">4. Agent 組裝沙盒</a>
+        <a href="#comparison" class="nav-link">5. 對照表與測驗</a>
+      </nav>
+      <button id="themeToggle" class="theme-btn" aria-label="切換深淺色主題" title="切換深色/淺色模式">
+        🌙 淺色模式
+      </button>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Hero 區塊 -->
+    <section id="hero" class="hero-section">
+      <div class="hero-badge">🚀 純前端互動式視覺化教學 · 免安裝即開即玩</div>
+      <h1 class="hero-title">
+        一次搞懂 <span class="gradient-text">AI Agent、Skills、MCP</span><br />
+        與背後看不見的 <span class="gradient-text-amber">Token 消耗真相</span>
+      </h1>
+      <p class="hero-desc">
+        為什麼別人的 Agent 既聰明又省錢，你的 Context Window 卻聊三句就爆掉？<br />
+        透過下方互動式模擬器，親手拆解 Agent 在<strong>對話、深度思考 (Thinking)、按需載入 Skills、呼叫 MCP 工具與派發 Subagent</strong> 時，每一輪 Token 的真實流動與變化！
+      </p>
+      <div class="hero-actions">
+        <a href="#token-simulator" class="btn btn-primary">▶ 立即體驗 Token 變化模擬器</a>
+        <a href="#concepts" class="btn btn-secondary">📖 從 1 分鐘白話比喻開始</a>
+      </div>
+    </section>
+
+    <!-- Section 1: 1 分鐘白話角色卡 -->
+    <section id="concepts" class="section-block">
+      <div class="section-header">
+        <span class="section-step">STEP 01 · MENTAL MODEL</span>
+        <h2>一分鐘白話比喻：把現代 AI 系統想成一間「米其林智慧廚房」</h2>
+        <p>在看技術架構前，先用最直覺的餐廳廚房比喻，秒懂這 5 個最常聽到的名詞分別扮演什麼角色：</p>
+      </div>
+
+      <div class="metaphor-grid">
+        <div class="metaphor-card" data-jump-arch="llm">
+          <div class="card-top">
+            <span class="card-emoji">🧠</span>
+            <span class="card-tag tag-blue">核心推理</span>
+          </div>
+          <h3>LLM (大語言模型)</h3>
+          <p class="metaphor-role">👉 比喻：<strong>智商極高但關在房間裡的大腦</strong></p>
+          <p class="card-desc">
+            很會推理、寫作與進行內部思考 (Thinking)，但本身<strong>沒有手腳</strong>，無法自己讀你的電腦檔案，也不知道資料庫現在有什麼。
+          </p>
+          <div class="token-mini-badge">💭 思考過程計入 Output Tokens</div>
+        </div>
+
+        <div class="metaphor-card" data-jump-arch="agent">
+          <div class="card-top">
+            <span class="card-emoji">🤖</span>
+            <span class="card-tag tag-purple">自主執行迴圈</span>
+          </div>
+          <h3>Agent (AI 代理)</h3>
+          <p class="metaphor-role">👉 比喻：<strong>擁有手腳與規劃能力的總主廚</strong></p>
+          <p class="card-desc">
+            把 LLM 包在「<strong>感知 → 思考 → 行動 → 觀察</strong>」迴圈裡。遇到問題會自己決定先查檔案、跑測試、看到報錯再自己修好！
+          </p>
+          <div class="token-mini-badge">🔄 每走一步迴圈，歷史 Context 重送一次</div>
+        </div>
+
+        <div class="metaphor-card" data-jump-arch="skills">
+          <div class="card-top">
+            <span class="card-emoji">📚</span>
+            <span class="card-tag tag-amber">按需載入秘笈</span>
+          </div>
+          <h3>Skills (技能包 / SKILL.md)</h3>
+          <p class="metaphor-role">👉 比喻：<strong>書架上的專業食譜與專用模具</strong></p>
+          <p class="card-desc">
+            平時主廚腦中只記著「書名目錄」（極省空間）；當客人點了「舒芙蕾」時，才去書架翻開那本食譜 (`SKILL.md`) 與附帶腳本照著做！
+          </p>
+          <div class="token-mini-badge">✨ 平時僅 ~35 tokens，用到才載入全文</div>
+        </div>
+
+        <div class="metaphor-card" data-jump-arch="mcp">
+          <div class="card-top">
+            <span class="card-emoji">🔌</span>
+            <span class="card-tag tag-green">萬用外接標準</span>
+          </div>
+          <h3>MCP (模型上下文協定)</h3>
+          <p class="metaphor-role">👉 比喻：<strong>廚房牆上的 USB-C 萬用插座</strong></p>
+          <p class="card-desc">
+            統一的連接標準！插上 GitHub MCP 就能發 PR，插上 Postgres MCP 就能查資料庫，不用為每台烤箱重拉電線。
+          </p>
+          <div class="token-mini-badge">⚠️ 掛載越多工具，常駐 Schema 越耗 Token</div>
+        </div>
+
+        <div class="metaphor-card" data-jump-arch="subagent">
+          <div class="card-top">
+            <span class="card-emoji">🕵️</span>
+            <span class="card-tag tag-cyan">獨立分身小隊</span>
+          </div>
+          <h3>Subagents (子代理)</h3>
+          <p class="metaphor-role">👉 比喻：<strong>派去市場採買調查的二廚分身</strong></p>
+          <p class="card-desc">
+            去另一個房間翻閱 50 份食材報告（消耗大量 Token），但最後只拿一張「300 字結論便利貼」回報給總主廚，完全不弄亂主廚房！
+          </p>
+          <div class="token-mini-badge">🛡️ 獨立 Context Window，主對話超乾淨</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: 互動式架構圖 -->
+    <section id="architecture" class="section-block">
+      <div class="section-header">
+        <span class="section-step">STEP 02 · INTERACTIVE ARCHITECTURE</span>
+        <h2>點擊拆解：AI Agent 完整運作架構與檔案實例</h2>
+        <p>點擊左側架構圖中的任意元件，右側將即時顯示它的<strong>運作原理、對 Token 的真實影響與實際設定檔範例</strong>：</p>
+      </div>
+
+      <div class="arch-layout">
+        <!-- 左側：互動架構圖 -->
+        <div class="arch-diagram-panel">
+          <div class="arch-diagram">
+            <div class="arch-row">
+              <button class="arch-node" data-node="user">
+                <span class="node-icon">👤</span>
+                <span class="node-name">User 使用者提問</span>
+                <span class="node-sub">高層次任務目標</span>
+              </button>
+              <div class="arch-arrow">➔</div>
+              <button class="arch-node" data-node="system">
+                <span class="node-icon">📜</span>
+                <span class="node-name">System Rules</span>
+                <span class="node-sub">CLAUDE.md / GEMINI.md</span>
+              </button>
+            </div>
+
+            <div class="arch-vertical-connector">▼ 進入 Context Window</div>
+
+            <!-- Agent 核心框 -->
+            <div class="arch-agent-box">
+              <div class="agent-box-label">🔄 Agent 自主執行迴圈 (ReAct Loop)</div>
+              <div class="arch-row">
+                <button class="arch-node active" data-node="agent">
+                  <span class="node-icon">🤖</span>
+                  <span class="node-name">Agent 控制器</span>
+                  <span class="node-sub">感知 · 決策 · 派發</span>
+                </button>
+                <div class="arch-arrow">⇄</div>
+                <button class="arch-node" data-node="llm">
+                  <span class="node-icon">🧠</span>
+                  <span class="node-name">LLM + Thinking</span>
+                  <span class="node-sub">內部思考與推理</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="arch-vertical-connector">▼ 按需擴充能力 (On-Demand & Tools)</div>
+
+            <div class="arch-row arch-extensions">
+              <button class="arch-node node-skill" data-node="skills">
+                <span class="node-icon">📚</span>
+                <span class="node-name">Skills 技能包</span>
+                <span class="node-sub">SKILL.md + 腳本 (按需讀入)</span>
+              </button>
+              <button class="arch-node node-mcp" data-node="mcp">
+                <span class="node-icon">🔌</span>
+                <span class="node-name">MCP Servers</span>
+                <span class="node-sub">DB / GitHub / API 連接</span>
+              </button>
+              <button class="arch-node node-subagent" data-node="subagent">
+                <span class="node-icon">🕵️</span>
+                <span class="node-name">Subagents</span>
+                <span class="node-sub">獨立 Context 子代理</span>
+              </button>
+            </div>
+          </div>
+          <div class="arch-hint">👆 點擊上方任一積木方塊查看詳細機制與範例程式碼</div>
+        </div>
+
+        <!-- 右側：節點詳情面板 -->
+        <div class="arch-detail-panel" id="archDetailPanel">
+          <!-- 由 app.js 動態渲染 -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: 核心重頭戲 — Agent 對話、思考、Skills 與 MCP 的 Token 變化模擬器 -->
+    <section id="token-simulator" class="section-block highlight-section">
+      <div class="section-header">
+        <span class="section-step">STEP 03 · LIVE TOKEN & CONTEXT VISUALIZER</span>
+        <h2>🔥 核心實戰：Agent 對話、思考與使用 Skills 時的 Token 變化範例</h2>
+        <p>
+          在下方選擇一個實戰劇本，點擊「下一步」觀察每一輪對話中 <strong>Context Window 記憶體佔用色塊</strong>、<strong>Input / Output Tokens 計費</strong>，以及開啟右上角「<strong>切換反面教材對比</strong>」看看不用 Skills 或 Subagent 時 Token 是如何爆炸的！
+        </p>
+      </div>
+
+      <!-- 劇本選擇 Tabs -->
+      <div class="scenario-tabs" id="scenarioTabs">
+        <!-- 由 app.js 動態生成 -->
+      </div>
+
+      <!-- 模擬器主控台 -->
+      <div class="simulator-workspace">
+        <!-- 頂部控制列：劇本標題 + 對比模式切換 -->
+        <div class="sim-topbar">
+          <div>
+            <h3 id="simTitle" class="sim-title">載入中...</h3>
+            <p id="simSubtitle" class="sim-subtitle"></p>
+          </div>
+          <div id="comparisonToggleWrapper" class="comparison-toggle-box">
+            <label class="switch-label">
+              <input type="checkbox" id="comparisonModeToggle" />
+              <span class="switch-slider"></span>
+              <span id="comparisonToggleText" class="switch-text">切換對比模式</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 步驟時間軸與按鈕 -->
+        <div class="sim-controls-bar">
+          <div class="step-buttons">
+            <button id="prevStepBtn" class="btn btn-sm btn-secondary">◀ 上一步</button>
+            <button id="nextStepBtn" class="btn btn-sm btn-primary">下一步 ▶</button>
+            <button id="autoPlayBtn" class="btn btn-sm btn-outline">▶ 自動播放</button>
+          </div>
+          <div class="step-indicators" id="stepIndicators">
+            <!-- 步驟圓點 -->
+          </div>
+          <div class="step-counter-badge" id="stepCounterBadge">Step 1 / 4</div>
+        </div>
+
+        <!-- Context Window 視覺化長條圖 -->
+        <div class="context-meter-card">
+          <div class="meter-header">
+            <div class="meter-title-group">
+              <span class="meter-title">📊 當前 Context Window 記憶體結構與佔用比例</span>
+              <span id="modeStatusPill" class="mode-pill pill-good">✨ 最佳實踐模式</span>
+            </div>
+            <div class="meter-usage-numbers">
+              當前 Context 總量：<strong id="currentContextTotal">0</strong> / <span id="contextLimitSpan">32,000</span> tokens
+              (<span id="contextUsagePercent">0%</span>)
+            </div>
+          </div>
+
+          <!-- 堆疊色塊條 -->
+          <div class="stacked-bar-container" id="stackedBarContainer">
+            <!-- 各色塊由 JS 動態改變寬度 -->
+          </div>
+
+          <!-- 圖例與即時數值 -->
+          <div class="segment-legend" id="segmentLegend">
+            <!-- 由 JS 渲染每個區塊的名稱與 token 數 -->
+          </div>
+        </div>
+
+        <!-- 雙欄：左側對話與思考過程 / 右側本輪與累計 Token 儀表板 -->
+        <div class="sim-split-grid">
+          <!-- 左側：當前步驟詳情與模擬終端機 -->
+          <div class="sim-step-detail-card">
+            <div class="step-phase-header">
+              <span id="stepActorBadge" class="actor-badge">User</span>
+              <span id="stepPhaseName" class="phase-name">階段名稱</span>
+            </div>
+            <h4 id="stepDetailTitle" class="step-detail-title">步驟標題</h4>
+            <p id="stepDetailDesc" class="step-detail-desc">步驟說明</p>
+
+            <!-- 對話 / Thinking / Tool Call 模擬氣泡 -->
+            <div id="simChatBubble" class="sim-chat-bubble">
+              <!-- 動態渲染 -->
+            </div>
+
+            <!-- 關鍵洞察提示框 -->
+            <div class="sim-insight-box" id="simInsightBox">
+              <!-- 動態渲染 -->
+            </div>
+          </div>
+
+          <!-- 右側：Token 帳單與滾雪球效應儀表板 -->
+          <div class="sim-metrics-card">
+            <h4 class="metrics-card-title">💰 Token 計費錶板 (本輪 vs 累計總消耗)</h4>
+            
+            <div class="metrics-grid">
+              <div class="metric-box">
+                <span class="metric-label">📥 本輪 Input Tokens</span>
+                <span class="metric-value" id="turnInputVal">0</span>
+                <span class="metric-note">含歷史 Context 重送</span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">📤 本輪 Output Tokens</span>
+                <span class="metric-value text-amber" id="turnOutputVal">0</span>
+                <span class="metric-note">含 Thinking 思考與回覆</span>
+              </div>
+              <div class="metric-box metric-box-wide">
+                <div class="cumulative-row">
+                  <div>
+                    <span class="metric-label">🔥 截至目前累計總消耗 (All Turns)</span>
+                    <div class="metric-value-lg" id="cumulativeTotalVal">0 tokens</div>
+                  </div>
+                  <div id="savingsComparisonBadge" class="savings-badge">
+                    <!-- 對比省下多少 % -->
+                  </div>
+                </div>
+                <div class="cumulative-progress-wrap">
+                  <div class="cumulative-bar-label">
+                    <span>✨ 最佳實踐累計：<strong id="bestPracticeCumVal">0</strong></span>
+                    <span id="altPracticeCumLabel">💥 反面教材累計：<strong id="altPracticeCumVal">0</strong></span>
+                  </div>
+                  <div class="dual-bars">
+                    <div class="dual-bar-track">
+                      <div id="bestCumBar" class="dual-bar-fill fill-good" style="width: 15%"></div>
+                    </div>
+                    <div class="dual-bar-track" id="altCumTrack">
+                      <div id="altCumBar" class="dual-bar-fill fill-bad" style="width: 80%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 為什麼 Agent 特別吃 Token？小百科 -->
+            <div class="token-rule-mini-card">
+              <h5>📌 必懂的 3 條 Token 黃金鐵律：</h5>
+              <ul>
+                <li><strong>1. 滾雪球效應：</strong>Agent 呼叫 1 次工具 = 2 次 API 請求。第 $N$ 步會把前 $N-1$ 步的所有內容再當成 Input 送一次！</li>
+                <li><strong>2. Thinking 算 Output：</strong>模型思考 `<thought>` 會消耗較貴的 Output Token，但下一輪對話時會被清除，不佔長期空間。</li>
+                <li><strong>3. Skills 救回 Context：</strong>只有被翻開的 `SKILL.md` 才會進入 Context，沒用到的技能只佔 35 tokens 目錄費！</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: 動手組裝你的 AI Agent 實驗室 (Sandbox Calculator) -->
+    <section id="sandbox" class="section-block">
+      <div class="section-header">
+        <span class="section-step">STEP 04 · BUILD YOUR AGENT SANDBOX</span>
+        <h2>🧪 動手實驗：組裝你的 AI Agent 並預測 Token 帳單</h2>
+        <p>
+          試著勾選不同的 <strong>MCP Servers</strong>、<strong>Skills 數量</strong>、<strong>載入策略</strong>與<strong>思考深度</strong>，即時觀察一個 5 步任務下來會消耗多少 Tokens，並取得架構健康度診斷！
+        </p>
+      </div>
+
+      <div class="sandbox-grid">
+        <!-- 左側：組裝控制面板 -->
+        <div class="sandbox-controls-card">
+          <div class="control-group">
+            <div class="control-group-header">
+              <h4>🔌 1. 掛載 MCP Servers (外部工具擴充)</h4>
+              <span class="control-badge" id="mcpSelectedSummary">已選 2 個</span>
+            </div>
+            <p class="control-hint">每個勾選的 MCP Server 都會在每一輪固定載入其所有 Tools 的 JSON Schema：</p>
+            <div class="checkbox-list" id="sandboxMcpList">
+              <!-- 由 JS 渲染 -->
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-group-header">
+              <h4>📚 2. 安裝團隊領域知識庫 (共 8 套 SOP)</h4>
+              <span class="control-badge" id="skillsSelectedSummary">已選 4 套</span>
+            </div>
+            <div class="strategy-radio-group">
+              <label class="radio-card active" id="strategySkillCard">
+                <input type="radio" name="skillStrategy" value="skills" checked />
+                <div>
+                  <strong>✨ 做成 Skills 按需載入 (推薦)</strong>
+                  <span>平時只載入 35 tokens 簡介，任務只觸發其中 1 套完整載入</span>
+                </div>
+              </label>
+              <label class="radio-card" id="strategyPromptCard">
+                <input type="radio" name="skillStrategy" value="prompt" />
+                <div>
+                  <strong>💥 全塞進 CLAUDE.md / System Prompt</strong>
+                  <span>不管用不用得到，每一輪都把所有勾選的規範全文送給模型</span>
+                </div>
+              </label>
+            </div>
+            <div class="checkbox-list compact-grid" id="sandboxSkillsList">
+              <!-- 由 JS 渲染 -->
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-group-header">
+              <h4>⚙️ 3. 模型思考深度與任務步數</h4>
+            </div>
+            <div class="sliders-row">
+              <div class="slider-item">
+                <label for="thinkingDepthSelect">🧠 思考模式 (Thinking Mode)：</label>
+                <select id="thinkingDepthSelect" class="custom-select">
+                  <option value="0">關閉思考 (0 thinking tokens/步)</option>
+                  <option value="450" selected>標準推理 (~450 thinking tokens/步)</option>
+                  <option value="1800">深度推理 Extended Thinking (~1,800 tokens/步)</option>
+                </select>
+              </div>
+              <div class="slider-item">
+                <label for="loopStepsRange">
+                  🔄 單次任務 Agent 執行迴圈步數：<strong id="loopStepsVal">4 步</strong>
+                </label>
+                <input type="range" id="loopStepsRange" min="1" max="8" value="4" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右側：即時運算結果與健康度診斷 -->
+        <div class="sandbox-result-card">
+          <div class="health-score-banner" id="healthScoreBanner">
+            <div class="score-circle" id="healthScoreCircle">92</div>
+            <div class="score-text-wrap">
+              <h4 id="healthTitle">架構健康度：優良 (精實高效)</h4>
+              <p id="healthAdvice">你的 MCP 工具數量適中，且善用 Skills 按需載入，Context 空間非常充裕！</p>
+            </div>
+          </div>
+
+          <div class="sandbox-kpi-row">
+            <div class="kpi-item">
+              <span class="kpi-label">起手常駐 Base Context</span>
+              <strong class="kpi-num" id="sbBaseTokens">0</strong>
+              <span class="kpi-sub">每一步都會重複計費的底消</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">完成任務總消耗 Tokens</span>
+              <strong class="kpi-num text-gradient" id="sbTotalTaskTokens">0</strong>
+              <span class="kpi-sub">Input + Output (含思考) 總和</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">對比全塞 Prompt 省下</span>
+              <strong class="kpi-num text-green" id="sbSavedTokens">0</strong>
+              <span class="kpi-sub" id="sbSavedPercent">節省 0%</span>
+            </div>
+          </div>
+
+          <!-- 每一步的 Token 堆疊變化長條圖 -->
+          <div class="turn-chart-box">
+            <h5>📈 任務各步迴圈 (Step 1 ~ Step N) 的單步 Token 消耗變化圖</h5>
+            <div class="turn-bars-wrapper" id="sandboxTurnBars">
+              <!-- 由 JS 渲染每一步的直立或橫向柱狀圖 -->
+            </div>
+            <div class="chart-legend-mini">
+              <span><i class="dot dot-purple"></i> 常駐設定 & MCP Schema</span>
+              <span><i class="dot dot-amber"></i> Skills 載入</span>
+              <span><i class="dot dot-green"></i> 歷史對話與工具回傳累加</span>
+              <span><i class="dot dot-yellow"></i> Thinking & Output</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5: 終極對照表與隨堂測驗 -->
+    <section id="comparison" class="section-block">
+      <div class="section-header">
+        <span class="section-step">STEP 05 · CHEAT SHEET & QUIZ</span>
+        <h2>🧭 實戰速查對照表 & 5 題闖關小測驗</h2>
+        <p>遇到實際開發需求時，到底該寫在 `CLAUDE.md`、做成 `Skill`、接 `MCP`，還是派 `Subagent`？</p>
+      </div>
+
+      <!-- 情境篩選器 -->
+      <div class="filter-bar">
+        <span>🔍 我現在想要：</span>
+        <button class="filter-chip active" data-filter="all">顯示全部</button>
+        <button class="filter-chip" data-filter="style">統一團隊程式碼與工作流規範</button>
+        <button class="filter-chip" data-filter="external">連接資料庫 / GitHub / 外部服務</button>
+        <button class="filter-chip" data-filter="script">提供現成 Python/Bash 腳本給 AI 跑</button>
+        <button class="filter-chip" data-filter="search">搜尋上百個檔案且不弄髒對話</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>項目名稱</th>
+              <th>核心定位與白話比喻</th>
+              <th>載入時機</th>
+              <th>對 Token 的影響</th>
+              <th>最佳適用場景</th>
+            </tr>
+          </thead>
+          <tbody id="comparisonTableBody">
+            <!-- 由 JS 渲染 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 互動小測驗 -->
+      <div class="quiz-container">
+        <div class="quiz-header">
+          <div>
+            <h3>🏆 隨堂互動挑戰：你是 AI Token 調校大師嗎？</h3>
+            <p>完成以下 5 題實戰情境題，檢驗你對 Agent、Skills、MCP 與 Token 變化的掌握度！</p>
+          </div>
+          <div class="quiz-score-pill" id="quizScorePill">目前得分：0 / 5</div>
+        </div>
+        <div id="quizList" class="quiz-list">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p>⚡ <strong>AI Flow 互動教學實驗室</strong> — 專為理解 AI Agent、Skills、MCP 與 Token 最佳化打造的純前端互動指南</p>
+    </div>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

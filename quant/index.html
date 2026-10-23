@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 模型壓縮技術：互動式教學</title>
+  <meta name="description" content="用互動實驗學會量化、剪枝、知識蒸餾與低秩分解。純前端，無需安裝。">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- ===== 側邊導覽 ===== -->
+  <aside class="sidebar">
+    <div class="brand">🗜️ AI 模型壓縮<small>互動式教學</small></div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>測驗完成進度</span><span id="progressText">0 / 9</span></div>
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+    <ul class="nav">
+      <li><a href="#intro">為什麼要壓縮模型</a></li>
+      <li><a href="#formats">數字在電腦裡怎麼存</a></li>
+      <li><a href="#quant">量化基礎</a></li>
+      <li><a href="#quant-adv">進階量化：PTQ、QAT 與 LLM</a></li>
+      <li><a href="#prune">剪枝</a></li>
+      <li><a href="#distill">知識蒸餾</a></li>
+      <li><a href="#lowrank">低秩分解</a></li>
+      <li><a href="#lab">綜合實驗室</a></li>
+      <li><a href="#summary">總結與選擇指南</a></li>
+    </ul>
+    <div class="sidebar-foot">
+      <button class="btn small" id="themeToggle">🌙 暗色</button>
+      <button class="btn small" id="resetProgress">清除進度</button>
+    </div>
+  </aside>
+  <button class="menu-btn" aria-label="開啟目錄">☰</button>
+
+  <main>
+  <div class="content">
+
+    <header class="hero">
+      <h1>AI 模型壓縮技術：互動式教學</h1>
+      <p>大模型很強，但也很「胖」。這份教學帶你從位元層級開始，一步步理解<b>量化、剪枝、知識蒸餾、低秩分解</b>這四大類壓縮技術，
+        每一個概念都有可以動手操作的實驗。</p>
+      <p>所有計算（包含 SVD 分解與神經網路訓練）都在你的瀏覽器裡執行，不會上傳任何資料。</p>
+      <div class="meta">
+        <span class="chip">⏱️ 約 60–90 分鐘</span>
+        <span class="chip">📚 先備知識：矩陣乘法、神經網路基本概念</span>
+        <span class="chip">🧪 12 個互動實驗</span>
+        <span class="chip">✅ 每章附小測驗</span>
+      </div>
+    </header>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="intro">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 0</span></div>
+      <h2>為什麼要壓縮模型？</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        模型壓縮 = 用<b>更少的位元</b>、<b>更少的參數</b>或<b>更小的架構</b>，儘量保留原本的能力，
+        換來更小的記憶體、更快的推論、更低的耗電，以及能在便宜硬體上執行。
+      </div>
+
+      <p>一個模型佔多少記憶體，只要一個公式就能估算：</p>
+      <div class="formula">
+        權重大小（bytes）＝ 參數數量 × <span class="frac"><span>每個參數的位元數</span><span>8</span></span>
+        <span class="note">例：Llama 3.1 8B 以 FP16（16 bits）儲存 → 8×10⁹ × 2 bytes ≈ 16 GB，一張 RTX 4090（24 GB）勉強放得下；改成 4 bits 只要約 4 GB。</span>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 0：模型放得進你的硬體嗎？</div>
+        <div class="controls">
+          <div class="control" style="flex-basis:100%">
+            <label for="memParams">參數數量 <output id="memParamsOut"></output></label>
+            <input type="range" id="memParams" min="-1.3" max="2.7" step="0.01" value="0.903">
+            <div class="btn-row" id="memPresets"></div>
+          </div>
+          <div class="control" style="flex-basis:100%">
+            <span class="label">目標硬體</span>
+            <div class="seg" id="memDevice">
+              <button data-value="phone">旗艦手機 ~12GB</button>
+              <button data-value="laptop">筆電 GPU 8GB</button>
+              <button data-value="rtx4090" class="active">RTX 4090 24GB</button>
+              <button data-value="h100">H100 80GB</button>
+            </div>
+          </div>
+        </div>
+        <div class="mem-rows" id="memRows"></div>
+        <p class="caption" id="memNote"></p>
+      </div>
+
+      <h3>關鍵觀念：壓縮不只省空間，還會變快</h3>
+      <p>大型語言模型（LLM）逐字生成時，每產生一個 token，都要把<b>全部權重從記憶體讀一次</b>。
+        這時 GPU 的運算單元多半在等資料，瓶頸是<b>記憶體頻寬</b>（memory-bound）。所以：</p>
+      <div class="formula">
+        生成速度上限（token/s）≈ <span class="frac"><span>記憶體頻寬（GB/s）</span><span>權重大小（GB）</span></span>
+        <span class="note">權重從 16 bits 變成 4 bits，要搬的資料變成 1/4，速度上限就約提高 4 倍。上面實驗中的 token/s 就是這樣估出來的（batch = 1 的理論上限）。</span>
+      </div>
+
+      <h3>四大類壓縮技術地圖</h3>
+      <div class="grid-4">
+        <a class="tech-card" href="#quant"><div class="icon">🔢</div><b>量化 Quantization</b>
+          <p>降低每個數字的位元數（32 → 8 → 4）。<br>比喻：照片從全彩降為 256 色。</p></a>
+        <a class="tech-card" href="#prune"><div class="icon">✂️</div><b>剪枝 Pruning</b>
+          <p>刪除不重要的連結或神經元。<br>比喻：修剪樹上多餘的枝葉。</p></a>
+        <a class="tech-card" href="#distill"><div class="icon">👩‍🏫</div><b>知識蒸餾 Distillation</b>
+          <p>讓大模型（老師）教小模型（學生）。<br>比喻：名師傳授解題直覺。</p></a>
+        <a class="tech-card" href="#lowrank"><div class="icon">🧩</div><b>低秩分解 Low-rank</b>
+          <p>用兩個「瘦」矩陣的乘積近似一個大矩陣。<br>比喻：用幾個主題摘要整本相簿。</p></a>
+      </div>
+      <p class="caption">這四類可以互相組合，例如「先蒸餾成小模型 → 再剪枝 → 最後量化」。</p>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 一個 70 億（7B）參數的模型以 FP16 儲存，權重大約佔多少記憶體？</p>
+          <ol class="opts"><li>3.5 GB</li><li>7 GB</li><li>14 GB</li><li>28 GB</li></ol>
+          <div class="explain">FP16 = 16 bits = 2 bytes，7×10⁹ × 2 = 14×10⁹ bytes ≈ 14 GB。FP32 會是 28 GB，INT4 約 3.5 GB。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. 為什麼把 LLM 從 16-bit 量化到 4-bit，單一使用者生成文字的速度通常會變快？</p>
+          <ol class="opts">
+            <li>因為 4-bit 的乘法電路一定比較多</li>
+            <li>因為逐字生成的瓶頸是從記憶體搬運權重，資料量變成約 1/4</li>
+            <li>因為量化後參數數量變少了</li>
+            <li>其實不會變快，只會變小</li>
+          </ol>
+          <div class="explain">batch 小的時候，LLM 解碼是 memory-bound：每個 token 都要讀過一次全部權重。位元數變少 → 要搬的 bytes 變少 → 更快。參數「數量」並沒有變。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="formats">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 1</span></div>
+      <h2>數字在電腦裡怎麼存？</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        浮點數 = 符號 × 2<sup>指數</sup> × 尾數。<b>指數位元決定「範圍」</b>（能表示多大多小），
+        <b>尾數位元決定「精細度」</b>（相鄰兩個數字差多少）。位元總數固定時，兩者互相取捨。
+      </div>
+
+      <div class="formula">
+        值 = (−1)<sup><span style="color:var(--sign)">S</span></sup> × 2<sup><span style="color:var(--exp)">E</span> − bias</sup> × (1 + <span class="frac"><span style="color:var(--man)">M</span><span>2<sup>尾數位數</sup></span></span>)
+        <span class="note"><span style="color:var(--sign)">■ 符號 S</span>：0 為正、1 為負
+          <span style="color:var(--exp)">■ 指數 E</span>：以 bias 偏移表示正負次方
+          <span style="color:var(--man)">■ 尾數 M</span>：小數部分（前面隱含一個 1）。E 全為 0 時是「次正規數」，用來表示非常接近 0 的值。</span>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 1：位元檢視器（點擊任何位元可以翻轉它）</div>
+        <div class="controls">
+          <div class="control" style="max-width:260px">
+            <label for="fmtInput">輸入一個數字</label>
+            <input type="text" id="fmtInput" value="3.14159" inputmode="decimal">
+          </div>
+          <div class="btn-row" id="fmtPresets">
+            <span class="caption">試試：</span>
+            <button class="btn small" data-v="0.1">0.1</button>
+            <button class="btn small" data-v="70000">70000</button>
+            <button class="btn small" data-v="300">300</button>
+            <button class="btn small" data-v="0.00000001">1e-8</button>
+            <button class="btn small" data-v="1.001">1.001</button>
+            <button class="btn small" data-v="-2.5">-2.5</button>
+          </div>
+        </div>
+        <div id="fmtRows"></div>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li>輸入 <b>70000</b>：FP16 最大只能表示 65504，所以<b>溢位成 ∞</b>；BF16 指數位和 FP32 一樣多，所以放得下（但被捨入成 70144）。</li>
+          <li>輸入 <b>1.001</b>：BF16 只有 7 個尾數位元，1.001 和 1 對它來說是同一個數字。</li>
+          <li>輸入 <b>1e-8</b>：FP16 太小表示不了，直接變成 0（下溢）。</li>
+          <li>在 FP32 那列點擊指數最低位，看看數值怎麼「乘 2 或除 2」。</li>
+        </ol>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <tr><th>格式</th><th class="num">位元</th><th>指數 / 尾數</th><th class="num">最大值</th><th class="num">約有效十進位位數</th><th>常見用途</th></tr>
+          <tr><td>FP32</td><td class="num">32</td><td>8 / 23</td><td class="num">3.4×10³⁸</td><td class="num">7.2</td><td>傳統訓練、需要高精度的計算</td></tr>
+          <tr><td>FP16</td><td class="num">16</td><td>5 / 10</td><td class="num">65504</td><td class="num">3.3</td><td>推論、混合精度訓練（需 loss scaling）</td></tr>
+          <tr><td>BF16</td><td class="num">16</td><td>8 / 7</td><td class="num">3.4×10³⁸</td><td class="num">2.4</td><td>大模型訓練（範圍與 FP32 相同，不易溢位）</td></tr>
+          <tr><td>FP8 E4M3</td><td class="num">8</td><td>4 / 3</td><td class="num">448</td><td class="num">1.2</td><td>H100 等新硬體的前向傳播、推論</td></tr>
+          <tr><td>FP8 E5M2</td><td class="num">8</td><td>5 / 2</td><td class="num">57344</td><td class="num">0.9</td><td>梯度（需要較大範圍）</td></tr>
+          <tr><td>INT8</td><td class="num">8</td><td>—（均勻刻度）</td><td class="num">127 × scale</td><td class="num">—</td><td>量化推論（需搭配 scale，見下一章）</td></tr>
+          <tr><td>INT4</td><td class="num">4</td><td>—（均勻刻度）</td><td class="num">7 × scale</td><td class="num">—</td><td>LLM 權重量化</td></tr>
+        </table>
+      </div>
+      <p class="caption">有效位數 ≈ (尾數位元 + 1) × log₁₀2。</p>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        「INT8 和 FP8 都是 8 bits，所以一樣」—— 不一樣。浮點數的刻度在 0 附近很密、越遠越疏（相對誤差固定）；
+        整數的刻度是<b>均勻</b>的（絕對誤差固定），而且只能表示整數，所以 INT 量化一定要搭配一個縮放係數 <b>scale</b>，
+        把真實數值的範圍對應到整數範圍。這就是下一章的主角。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. BF16 和 FP16 都是 16 bits，它們的主要差別是？</p>
+          <ol class="opts">
+            <li>BF16 尾數比較多，所以更精確</li>
+            <li>BF16 指數位元比較多，範圍和 FP32 一樣大，但精細度較低</li>
+            <li>BF16 沒有符號位元</li>
+            <li>兩者完全相同，只是名字不同</li>
+          </ol>
+          <div class="explain">BF16 = 1 + 8 + 7，FP16 = 1 + 5 + 10。BF16 犧牲精度換取範圍，訓練大模型時比較不會溢位。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 要儲存數值 100000，下列哪種格式會溢位變成無限大？</p>
+          <ol class="opts"><li>FP16</li><li>BF16</li><li>FP32</li><li>三者都不會</li></ol>
+          <div class="explain">FP16 最大值只有 65504。BF16 與 FP32 都有 8 個指數位元，最大值約 3.4×10³⁸。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="quant">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 2</span></div>
+      <h2>量化基礎：把實數對齊到刻度上</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        量化就是把連續的實數「四捨五入」到少數幾個<b>等距刻度</b>上，只儲存刻度的編號（小整數 q）和一個縮放係數 <b>scale</b>（以及可選的 zero-point）。
+        用的時候再乘回去：x̂ = s · (q − z)。
+      </div>
+
+      <h3>兩種最常見的線性量化</h3>
+      <div class="grid-2">
+        <div class="card" style="margin:0">
+          <h4>對稱量化（Symmetric）</h4>
+          <div class="formula" style="font-size:1rem">
+            s = <span class="frac"><span>max |x|</span><span>2<sup>b−1</sup> − 1</span></span>，z = 0<br>
+            q = clamp(round(x / s), −(2<sup>b−1</sup>−1), 2<sup>b−1</sup>−1)
+          </div>
+          <p>刻度以 0 為中心左右對稱。計算簡單、硬體友善，<b>權重</b>（大致以 0 為中心）最常用。</p>
+        </div>
+        <div class="card" style="margin:0">
+          <h4>非對稱量化（Asymmetric / Affine）</h4>
+          <div class="formula" style="font-size:1rem">
+            s = <span class="frac"><span>max − min</span><span>2<sup>b</sup> − 1</span></span>，z = round(−min / s)<br>
+            q = clamp(round(x / s) + z, 0, 2<sup>b</sup>−1)
+          </div>
+          <p>多一個 zero-point z，刻度貼合資料的實際範圍。適合<b>分佈偏一邊</b>的資料，例如 ReLU 之後的啟動值（全為正數）。</p>
+        </div>
+      </div>
+      <p class="caption">round = 四捨五入、clamp = 超出範圍就截到邊界。b = 位元數。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 2：在數線上看量化（逐步計算）</div>
+        <div class="controls">
+          <div class="control" style="flex-basis:100%">
+            <label for="qValues">要量化的數值（逗號分隔，最多 16 個）</label>
+            <input type="text" id="qValues" value="-0.8, -0.3, 0.05, 0.42, 0.9, 1.35, 1.9, 2.6">
+          </div>
+          <div class="control">
+            <label for="qBits">位元數 b <output for="qBits"></output></label>
+            <input type="range" id="qBits" min="2" max="8" step="1" value="3">
+          </div>
+          <div class="control">
+            <span class="label">量化方式</span>
+            <div class="seg" id="qMode">
+              <button data-value="sym">對稱</button>
+              <button data-value="asym" class="active">非對稱</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn small" id="qRandom">🎲 隨機數值</button>
+            <button class="btn small" id="qOutlier">💥 加入離群值 12</button>
+            <button class="btn small" id="qReset">↺ 還原</button>
+          </div>
+        </div>
+        <div class="canvas-box"><canvas id="qLine" style="height:210px"></canvas></div>
+        <div class="formula" id="qFormula"></div>
+        <div class="metrics" id="qMetrics"></div>
+        <div class="table-wrap"><table id="qTable"></table></div>
+        <p class="caption">紅色列 = 四捨五入後超出整數範圍而被截斷（clamp）的值。</p>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li>切換「對稱 / 非對稱」：這組資料大多是正數，對稱量化會把一半的刻度浪費在沒有資料的負數區。</li>
+          <li>把位元數從 3 調到 8：最大誤差永遠不超過 s/2，而 s 每多 1 bit 就約減半。</li>
+          <li>按「加入離群值 12」：一個極端值把範圍撐大 → s 變大 → <b>其他所有數值</b>的誤差都變大。</li>
+        </ol>
+      </div>
+
+      <h3>粒度、離群值與截斷</h3>
+      <p>真實模型有數百萬到數十億個權重，關鍵問題是：<b>多少個權重共用一個 scale？</b></p>
+      <ul>
+        <li><b>Per-tensor（整張量）</b>：整個矩陣一個 scale。最省空間，但只要有一個離群值，整個矩陣都受害。</li>
+        <li><b>Per-channel（逐通道）</b>：矩陣每一列（輸出通道）一個 scale。CNN 與 INT8 權重量化的標準做法。</li>
+        <li><b>Per-group（分組）</b>：每 g 個連續權重（常見 g = 32、64、128）一個 scale。4-bit LLM 量化的主流做法。代價：scale 也要佔空間。</li>
+      </ul>
+      <div class="formula">
+        平均位元數 = b + <span class="frac"><span>scale 的位元數（常為 16）</span><span>group size g</span></span>
+        <span class="note">例：4-bit、g = 128、FP16 scale → 4 + 16/128 = 4.125 bits；g = 32 → 4.5 bits。所以「4-bit 模型」實際上通常略大於 4 bits/參數。</span>
+      </div>
+      <p>另一招是<b>截斷（clipping）</b>：故意把範圍設得比最大值小，犧牲少數離群值（截斷誤差變大），換取多數值的刻度變細（捨入誤差變小）。
+        PTQ 的「校準（calibration）」就是在找最佳的截斷範圍。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 3：4096 個權重的量化實驗室</div>
+        <div class="controls">
+          <div class="control">
+            <label for="dBits">位元數 <output for="dBits"></output></label>
+            <input type="range" id="dBits" min="2" max="8" step="1" value="4">
+          </div>
+          <div class="control">
+            <label for="dClip">截斷範圍 <output for="dClip"></output></label>
+            <input type="range" id="dClip" min="90" max="100" step="0.1" value="100">
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control"><span class="label">權重分佈</span>
+            <div class="seg" id="dDist"><button data-value="normal" class="active">常態分佈</button><button data-value="laplace">重尾（Laplace）</button></div></div>
+          <div class="control"><span class="label">離群值（5 個，約 12–20σ）</span>
+            <div class="seg" id="dOutlier"><button data-value="off" class="active">無</button><button data-value="on">有</button></div></div>
+          <div class="control" style="flex-basis:100%"><span class="label">量化粒度（幾個權重共用一個 scale）</span>
+            <div class="seg" id="dGroup">
+              <button data-value="tensor" class="active">per-tensor（4096 個）</button>
+              <button data-value="256">group 256</button>
+              <button data-value="128">group 128</button>
+              <button data-value="64">group 64</button>
+              <button data-value="32">group 32</button>
+            </div></div>
+          <div class="control"><span class="label">直方圖範圍</span>
+            <div class="seg" id="dView"><button data-value="focus" class="active">聚焦 ±4</button><button data-value="all">全部</button></div></div>
+          <button class="btn small" id="dResample">🎲 重新抽樣</button>
+        </div>
+        <div class="metrics" id="dMetrics"></div>
+        <div class="legend"><span style="--sw:var(--muted)">原始權重分佈</span><span style="--sw:var(--c1)">量化後的值（只會落在刻度上）</span></div>
+        <div class="canvas-box"><canvas id="dHist" style="height:220px"></canvas></div>
+        <h4>SQNR 與位元數的關係</h4>
+        <div class="canvas-box"><canvas id="dCurve" style="height:200px"></canvas></div>
+        <p class="caption">SQNR（訊號量化雜訊比）= 10·log₁₀(Σx² / Σ(x − x̂)²)。圓圈 = 目前設定。</p>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li><b>每多 1 bit，SQNR 約增加 6 dB</b>（誤差能量降為約 1/4）。從曲線斜率確認看看。</li>
+          <li>打開「離群值」，per-tensor 的 SQNR 大幅下降；切到「全部」範圍，看看刻度被撐得多開。</li>
+          <li>有離群值時改用 group 64：離群值只會污染它所在的那一組，其他組不受影響。</li>
+          <li>沒有離群值、per-tensor、3 bits 時，把截斷慢慢往左拉：SQNR 先<b>上升</b>（刻度變細）、過了某個點又<b>下降</b>（截掉太多）。找出最高點 —— 這就是校準在做的事。</li>
+        </ol>
+      </div>
+
+      <div class="box recap"><span class="box-title">📌 本章回顧</span>
+        <ul>
+          <li>x̂ = s · (q − z)。誤差來源有兩種：<b>捨入誤差</b>（≤ s/2）與<b>截斷誤差</b>（超出範圍的值）。</li>
+          <li>對稱量化簡單；非對稱量化能貼合偏一邊的資料。</li>
+          <li>離群值是量化的頭號敵人；更細的粒度（per-channel / per-group）與截斷是兩大對策。</li>
+        </ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 本頁使用的 4-bit 對稱量化（限制範圍），整數 q 的範圍是？</p>
+          <ol class="opts"><li>0 ~ 15</li><li>−8 ~ 8</li><li>−7 ~ 7</li><li>−16 ~ 15</li></ol>
+          <div class="explain">2<sup>4−1</sup> − 1 = 7，所以是 −7 ~ 7。（4-bit 二補數其實可以到 −8，但多數實作為了左右對稱而不使用 −8。）</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. 一個權重矩陣中出現一個極大的離群值，在 per-tensor 量化下會發生什麼事？</p>
+          <ol class="opts">
+            <li>只有那個離群值的誤差變大</li>
+            <li>scale 被撐大，所有其他權重的刻度變粗、誤差都變大</li>
+            <li>沒有影響，因為 clamp 會處理</li>
+            <li>模型會自動忽略它</li>
+          </ol>
+          <div class="explain">s = max|x| / qmax，max 變大 → s 變大 → 每個值的捨入誤差上限 s/2 都變大。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>3. 4-bit 量化時，把 group size 從 128 改成 32，主要的代價是什麼？</p>
+          <ol class="opts">
+            <li>量化誤差變大</li>
+            <li>不能再使用 GPU</li>
+            <li>需要重新訓練</li>
+            <li>要存更多 scale，平均位元數從 4.125 增加到 4.5</li>
+          </ol>
+          <div class="explain">更小的組 → 誤差通常更小，但每 32 個權重就要多存一個 16-bit scale：4 + 16/32 = 4.5 bits。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="quant-adv">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 3</span></div>
+      <h2>進階量化：PTQ、QAT 與大型語言模型</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        <b>PTQ</b>（訓練後量化）拿訓練好的模型直接量化，快速、不需訓練資料或只需少量校準資料；
+        <b>QAT</b>（量化感知訓練）在訓練中模擬量化，讓模型學會適應誤差，準確度較好但成本高。
+        LLM 太大、很難重新訓練，因此發展出 GPTQ、AWQ、SmoothQuant 等聰明的 PTQ 方法。
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <tr><th></th><th>PTQ 訓練後量化</th><th>QAT 量化感知訓練</th></tr>
+          <tr><td>流程</td><td>訓練好的模型 → 用幾百筆校準資料統計範圍 → 量化</td><td>在訓練（或微調）時，前向傳播就使用量化後的權重</td></tr>
+          <tr><td>成本</td><td>幾分鐘到幾小時，不需 GPU 叢集</td><td>需要訓練資料與完整訓練流程</td></tr>
+          <tr><td>8-bit</td><td>通常幾乎無損</td><td>幾乎無損</td></tr>
+          <tr><td>4-bit 以下</td><td>需要進階方法，否則掉很多</td><td>通常明顯優於 PTQ</td></tr>
+          <tr><td>適用</td><td>LLM、快速部署</td><td>手機端 CNN、極低位元、對準確度要求高</td></tr>
+        </table>
+      </div>
+
+      <h3>QAT 的核心技巧：直通估計器（STE）</h3>
+      <p>round() 是階梯函數，幾乎處處導數為 0，梯度傳不回去。STE 的做法很簡單粗暴：<b>前向傳播用量化值，反向傳播假裝量化不存在</b>。</p>
+      <div class="formula">
+        前向：y = f( Q(w) )　　反向：<span class="frac"><span>∂L</span><span>∂w</span></span> ≈ <span class="frac"><span>∂L</span><span>∂Q(w)</span></span>
+        <span class="note">也就是把 ∂Q(w)/∂w 當成 1。主權重 w 仍以高精度儲存並累積小幅更新，累積夠了就會跨到下一個刻度。第 7 章的實驗室就用這個方法做「微調」。</span>
+      </div>
+
+      <h3>權重量化 vs. 權重＋啟動值量化</h3>
+      <ul>
+        <li><b>Weight-only（例：W4A16）</b>：只量化權重，計算時再即時還原成 FP16。省記憶體與頻寬，對逐字生成最有效。GPTQ、AWQ、llama.cpp 的 GGUF 都屬此類。</li>
+        <li><b>W8A8</b>：權重與啟動值（activation）都量化成 INT8 / FP8，可以直接使用整數或 FP8 Tensor Core 做矩陣乘法，對大批次、計算密集（compute-bound）的情境有幫助。
+          難點在於 LLM 的<b>啟動值有固定幾個通道會出現巨大的離群值</b>。</li>
+      </ul>
+
+      <div class="card">
+        <div class="demo-title">實驗 4：SmoothQuant —— 把啟動值的困難「搬」到權重上</div>
+        <p>Y = X·W 中，X 的第 3、11 通道有離群值。因為 (X·diag(s)⁻¹)·(diag(s)·W) = X·W，
+          我們可以每個通道除以 s<sub>j</sub>、再把 W 對應的列乘上 s<sub>j</sub>，數學上結果不變，但兩邊都變得好量化：</p>
+        <div class="formula">s<sub>j</sub> = <span class="frac"><span>max|X<sub>j</sub>|<sup>α</sup></span><span>max|W<sub>j</sub>|<sup>1−α</sup></span></span>
+          <span class="note">α = 0：不平滑（困難全在啟動值）；α = 1：困難全部搬到權重。啟動值採 per-tensor 量化、權重採 per-channel INT8。</span></div>
+        <div class="controls">
+          <div class="control"><label for="sqAlpha">遷移強度 α <output for="sqAlpha"></output></label>
+            <input type="range" id="sqAlpha" min="0" max="1" step="0.05" value="0"></div>
+          <div class="control"><label for="sqStrength">離群通道放大倍數 <output for="sqStrength"></output></label>
+            <input type="range" id="sqStrength" min="1" max="60" step="1" value="30"></div>
+          <div class="control"><span class="label">啟動值位元數</span>
+            <div class="seg" id="sqBits"><button data-value="8" class="active">INT8</button><button data-value="6">INT6</button><button data-value="4">INT4</button></div></div>
+        </div>
+        <div class="metrics" id="sqMetrics"></div>
+        <div class="grid-2">
+          <div><div class="canvas-box"><canvas id="sqBars" style="height:200px"></canvas></div><p class="caption">各通道的最大絕對值（紅色編號 = 離群通道）</p></div>
+          <div><div class="canvas-box"><canvas id="sqCurve" style="height:200px"></canvas></div><p class="caption">輸出誤差 vs. α</p></div>
+        </div>
+      </div>
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        把 α 從 0 慢慢拉到 1：一開始橘色（啟動值）的高峰被壓平、誤差下降；拉過頭時藍色（權重）出現高峰，誤差又上升。最佳點在中間。把啟動值切到 INT6 或 INT4，平滑的效果會更明顯。
+      </div>
+
+      <h3>LLM 常見量化方法速覽</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>方法</th><th>類型</th><th>核心想法</th></tr>
+          <tr><td>LLM.int8()</td><td>W8A8 混合精度</td><td>把含離群值的少數特徵維度挑出來用 FP16 計算，其餘用 INT8。</td></tr>
+          <tr><td>SmoothQuant</td><td>W8A8</td><td>如上實驗，以逐通道縮放把啟動值的量化難度轉移給權重。</td></tr>
+          <tr><td>GPTQ</td><td>Weight-only（3–4 bit）</td><td>逐層、逐欄量化，利用二階資訊（Hessian 近似）把每一欄的量化誤差補償到尚未量化的權重上。</td></tr>
+          <tr><td>AWQ</td><td>Weight-only（4 bit）</td><td>依啟動值大小找出約 1% 的「重要權重通道」，以縮放保護它們，不需反向傳播。</td></tr>
+          <tr><td>NF4（QLoRA）</td><td>Weight-only 4 bit</td><td>刻度不等距，依常態分佈的分位數設計，更貼合權重分佈；常搭配 LoRA 微調。</td></tr>
+          <tr><td>GGUF k-quants</td><td>Weight-only 2–8 bit</td><td>llama.cpp 的格式，分層分塊量化（super-block 內再分 block），方便在 CPU / 筆電上執行。</td></tr>
+        </table>
+      </div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        「量化後一定會變快」—— 不一定。若硬體沒有對應的低位元運算指令或高效 kernel，反量化（dequantize）本身的開銷可能抵銷好處。
+        weight-only 量化在<b>大批次</b>（compute-bound）時加速效果通常有限，它最大的好處是<b>省記憶體</b>與<b>小批次時的頻寬</b>。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 以下哪一種量化流程需要在訓練過程中使用量化後的權重做前向傳播？</p>
+          <ol class="opts"><li>PTQ</li><li>QAT</li><li>兩者都需要</li><li>兩者都不需要</li></ol>
+          <div class="explain">QAT（Quantization-Aware Training）在訓練中模擬量化，讓模型適應；PTQ 只在訓練完成後做一次轉換。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>2. 直通估計器（STE）是如何處理 round() 無法微分的問題？</p>
+          <ol class="opts">
+            <li>改用更多位元避開 round()</li>
+            <li>用數值微分計算 round() 的梯度</li>
+            <li>反向傳播時把量化函數的導數當成 1，梯度直接穿過</li>
+            <li>只訓練 scale，不訓練權重</li>
+          </ol>
+          <div class="explain">前向用 Q(w)、反向假裝 Q 是恆等函數，梯度累積在高精度的主權重上。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. SmoothQuant 的核心想法是？</p>
+          <ol class="opts">
+            <li>以逐通道縮放把啟動值的離群困難轉移一部分到權重上，讓兩者都容易量化</li>
+            <li>把離群值直接刪除</li>
+            <li>只量化權重，不量化啟動值</li>
+            <li>用知識蒸餾訓練一個沒有離群值的模型</li>
+          </ol>
+          <div class="explain">X·W = (X·diag(s)⁻¹)·(diag(s)·W)，數學等價但數值分佈更平衡。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="prune">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 4</span></div>
+      <h2>剪枝：刪掉不重要的連結</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        許多權重接近 0、對輸出貢獻很小，把它們設為 0（剪掉）就能減少儲存與計算。
+        兩個關鍵問題：<b>剪哪些</b>（重要性怎麼評估）與<b>剪了之後硬體能不能真的加速</b>（稀疏的形狀）。
+      </div>
+
+      <h3>三種稀疏形狀</h3>
+      <ul>
+        <li><b>非結構化（Unstructured）</b>：任何位置的權重都能剪。最有彈性、準確度損失最小，但零散的 0 很難讓 GPU 加速。</li>
+        <li><b>結構化（Structured）</b>：整個神經元、通道、注意力頭甚至整層一起剪。矩陣直接變小，任何硬體都能加速，但準確度損失較大。</li>
+        <li><b>半結構化 N:M</b>：每 M 個連續權重中保留 N 個，例如 <b>2:4</b>（固定 50% 稀疏）。NVIDIA Ampere 以後的 Sparse Tensor Core 原生支援。</li>
+      </ul>
+      <p>最常見的重要性標準是<b>權重大小</b>（magnitude）：|w| 越小越不重要。更進階的方法會考慮啟動值（例：Wanda 用 |w|·‖x‖）或二階資訊（例：SparseGPT）。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 5：剪枝一個 12 × 16 的權重矩陣</div>
+        <div class="controls">
+          <div class="control"><span class="label">剪枝方式</span>
+            <div class="seg" id="pMode">
+              <button data-value="unstructured" class="active">非結構化</button>
+              <button data-value="rows">結構化（整列）</button>
+              <button data-value="nm">2:4 半結構化</button>
+            </div></div>
+          <div class="control"><label for="pSparsity">稀疏度（剪掉的比例）<output for="pSparsity"></output></label>
+            <input type="range" id="pSparsity" min="0" max="95" step="5" value="50"></div>
+          <button class="btn small" id="pResample">🎲 換一組權重</button>
+        </div>
+        <div class="legend"><span style="--sw:var(--neg)">負值</span><span style="--sw:var(--pos)">正值</span><span style="--sw:var(--border)">斜線 = 已剪掉（設為 0）</span></div>
+        <div class="wgrid" id="pGrid"></div>
+        <div class="metrics" id="pMetrics"></div>
+        <p><b>硬體加速：</b><span id="pSpeed"></span></p>
+        <h4>稀疏度 vs. 輸出誤差</h4>
+        <div class="canvas-box"><canvas id="pCurve" style="height:200px"></canvas></div>
+        <p class="caption">輸出誤差以 200 個隨機輸入 x 計算 ‖Wx − W′x‖ / ‖Wx‖（未經微調）。</p>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li>同樣 50% 稀疏，比較三種方式的輸出誤差：非結構化 &lt; 2:4 &lt; 結構化。彈性越大、損失越小。</li>
+          <li>非結構化剪掉 50% 時，「保留的權重能量」通常仍有約 90% 以上 —— 小權重本來就貢獻不多。</li>
+          <li>切到 2:4 模式，觀察每 4 格（藍線分隔）恰好剪掉 2 格。</li>
+        </ol>
+      </div>
+
+      <h3>實務流程：剪枝 → 微調 → 重複</h3>
+      <div class="flow">
+        <div class="node">訓練好的模型</div><span class="arrow">→</span>
+        <div class="node hi">剪掉一部分<small>例：再剪 20%</small></div><span class="arrow">→</span>
+        <div class="node hi">微調<small>讓剩下的權重補位</small></div><span class="arrow">→</span>
+        <div class="node">達到目標稀疏度？<small>否則回到剪枝</small></div>
+      </div>
+      <p>一次剪太多會讓模型崩潰，<b>逐步剪枝並穿插微調</b>（iterative pruning）通常能達到更高的稀疏度。
+        <b>彩票假說</b>（Lottery Ticket Hypothesis, Frankle &amp; Carbin 2019）更指出：大網路中存在一個小的子網路，
+        若從原本的初始值開始單獨訓練，也能達到相近的準確度。</p>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        「剪掉 50% 的權重 → 快 2 倍、小一半」—— 非結構化稀疏需要額外存「哪些位置非零」的索引，
+        而且一般的稠密矩陣乘法 kernel 不會跳過 0。稀疏度不夠高時，稀疏格式甚至可能更大、更慢。
+        要真正加速，請選擇結構化或 N:M 稀疏，或使用專門的稀疏推論引擎。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 哪一種稀疏形狀在 NVIDIA Ampere 以後的 GPU 上有原生硬體加速？</p>
+          <ol class="opts"><li>任意位置的非結構化稀疏</li><li>隨機剪枝</li><li>2:4 半結構化稀疏</li><li>以上皆是</li></ol>
+          <div class="explain">Sparse Tensor Core 支援每 4 個值中有 2 個為 0 的格式，矩陣乘法理論上最多可達 2 倍吞吐量。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 在相同稀疏度、不微調的情況下，通常哪一種方式的準確度損失最小？</p>
+          <ol class="opts"><li>非結構化剪枝</li><li>整個神經元的結構化剪枝</li><li>整層刪除</li><li>都一樣</li></ol>
+          <div class="explain">非結構化可以自由挑選最不重要的個別權重，限制最少，所以損失最小；代價是難以加速。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>3. 剪枝之後，通常要再做什麼來恢復準確度？</p>
+          <ol class="opts"><li>把剪掉的權重加回來</li><li>增加量化位元數</li><li>什麼都不用做</li><li>用訓練資料微調剩下的權重</li></ol>
+          <div class="explain">微調讓剩下的權重調整、補償被剪掉的部分。第 7 章實驗室可以親手驗證這件事。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="distill">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 5</span></div>
+      <h2>知識蒸餾：讓大模型教小模型</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        先訓練一個大而準的<b>老師模型</b>，再讓一個小的<b>學生模型</b>去模仿老師輸出的<b>機率分佈</b>，而不只是學資料集的標準答案。
+        這些分佈裡藏著「類別之間有多像」的資訊，稱為<b>暗知識（dark knowledge）</b>。
+      </div>
+
+      <div class="flow">
+        <div class="node">輸入圖片<small>🐱</small></div><span class="arrow">→</span>
+        <div class="node">老師（大模型）<small>凍結，不訓練</small></div><span class="arrow">→</span>
+        <div class="node hi">軟標籤 p<sub>t</sub><small>貓 80%、老虎 15%、狗 5%…</small></div><span class="arrow">→</span>
+        <div class="node">學生（小模型）<small>學習模仿</small></div>
+      </div>
+      <p>資料集的硬標籤只說「這是貓」；但老師說「這 80% 是貓、15% 像老虎、幾乎不可能是汽車」。
+        學生因此學到「貓和老虎很像、和汽車完全不像」，這比單一答案提供了更多訊息，所以常常學得更快、泛化更好。</p>
+
+      <h3>溫度（Temperature）讓分佈變軟</h3>
+      <div class="formula">
+        p<sub>i</sub>(T) = <span class="frac"><span>exp(z<sub>i</sub> / T)</span><span>Σ<sub>j</sub> exp(z<sub>j</sub> / T)</span></span>
+        <span class="note">z = logits（softmax 之前的分數）。T = 1 是一般的 softmax；T 越大，分佈越平滑，小機率類別之間的差異越明顯。</span>
+      </div>
+      <div class="formula">
+        L = <span class="hl">α</span> · CE(y, p<sub>s</sub>) + (1 − <span class="hl">α</span>) · <span class="hl">T²</span> · KL( p<sub>t</sub>(T) ‖ p<sub>s</sub>(T) )
+        <span class="note">第一項：學生學資料集的硬標籤；第二項：學生模仿老師的軟標籤。乘上 T² 是因為軟標籤項的梯度大小約與 1/T² 成正比，乘回來才能讓兩項的比重不隨 T 改變（Hinton 等人，2015）。</span>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 6：調整溫度，看見暗知識；再讓學生學習</div>
+        <div class="controls">
+          <div class="control"><label for="kdTemp">溫度 T <output for="kdTemp"></output></label>
+            <input type="range" id="kdTemp" min="1" max="20" step="0.5" value="1"></div>
+          <div class="control"><label for="kdAlpha">硬標籤權重 α <output for="kdAlpha"></output></label>
+            <input type="range" id="kdAlpha" min="0" max="1" step="0.05" value="0.3"></div>
+        </div>
+        <div class="prob-table" id="kdProbs"></div>
+        <div class="metrics" id="kdMetrics"></div>
+        <div class="formula" id="kdFormula"></div>
+        <div class="grid-2">
+          <div><h4 style="margin-top:0;color:var(--c2)">老師的 logits</h4><div class="logit-sliders" id="kdTeacher"></div></div>
+          <div><h4 style="margin-top:0;color:var(--c1)">學生的 logits</h4><div class="logit-sliders" id="kdStudent"></div></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn primary" id="kdTrain">▶ 讓學生學 60 步</button>
+          <button class="btn" id="kdStep">走 1 步</button>
+          <button class="btn" id="kdReset">↺ 重設</button>
+        </div>
+        <p class="caption">「學一步」= 對學生 logits 做梯度下降：∂L/∂z<sub>s</sub> = α(p<sub>s</sub> − y) + (1−α)·T·(p<sub>s</sub>(T) − p<sub>t</sub>(T))。</p>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li>T = 1 時，老師幾乎把所有機率都給「貓」，看起來和硬標籤差不多；把 T 拉到 4–8，「老虎」「狗」的機率浮現出來，而「汽車」「飛機」仍然很低 —— 這就是暗知識。</li>
+          <li>α = 1（只學硬標籤）時按「學 60 步」，學生只會把「貓」推高，其他類別的相對關係不會被學到；α = 0.3、T = 4 再試一次，學生的分佈會越來越像老師。</li>
+          <li>T 太大（例如 20）時，所有類別都趨近 20%，資訊反而被稀釋。實務上 T 常在 2–10 之間。</li>
+        </ol>
+      </div>
+
+      <h3>蒸餾的變形與實例</h3>
+      <ul>
+        <li><b>回應式蒸餾</b>（如上）：模仿老師的輸出分佈。</li>
+        <li><b>特徵式蒸餾</b>：模仿老師中間層的特徵或注意力圖（例：FitNets、TinyBERT）。</li>
+        <li><b>LLM 蒸餾</b>：用大模型產生的回答、推理過程（chain-of-thought）或每個 token 的機率分佈來訓練小模型。</li>
+        <li><b>實例</b>：DistilBERT 比 BERT-base 小 40%、快 60%，保留約 97% 的語言理解能力（Sanh 等人，2019）。</li>
+      </ul>
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        「蒸餾會把老師壓縮成學生」—— 蒸餾<b>不會改動</b>老師，它是一種<b>訓練方法</b>：學生的架構（多小、幾層）要自己設計，
+        而且需要訓練資料與運算資源。它常和剪枝搭配：先結構化剪枝得到小架構，再用原模型當老師蒸餾恢復能力。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 把 softmax 的溫度 T 調高，輸出的機率分佈會？</p>
+          <ol class="opts"><li>更集中在最大的類別</li><li>更平滑，小機率類別之間的差異更明顯</li><li>不變</li><li>出現負的機率</li></ol>
+          <div class="explain">z/T 會把 logits 之間的差距縮小，exp 之後的差距也跟著縮小，分佈變平滑。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 所謂「暗知識」指的是什麼？</p>
+          <ol class="opts">
+            <li>老師對錯誤類別給出的相對機率所透露的類別相似性</li>
+            <li>模型中沒有被使用到的神經元</li>
+            <li>訓練資料中的雜訊</li>
+            <li>量化後遺失的資訊</li>
+          </ol>
+          <div class="explain">例如「貓」的圖片被老師判為老虎的機率遠高於汽車，這種關係在硬標籤中完全看不到。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>3. 蒸餾損失中為什麼要把 KL 項乘上 T²？</p>
+          <ol class="opts"><li>讓損失變成正數</li><li>讓訓練更慢</li><li>補償軟標籤項梯度約隨 1/T² 縮小的效應，讓兩項比重穩定</li><li>沒有理由，是慣例</li></ol>
+          <div class="explain">對 logits 微分時，軟標籤項的梯度帶有 1/T 因子，且軟分佈之間的差距也約隨 1/T 縮小，合計約 1/T²。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="lowrank">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 6</span></div>
+      <h2>低秩分解：用兩個瘦矩陣取代一個胖矩陣</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        一個 m × n 的矩陣如果「資訊有很多重複」，就能近似成 (m × r) · (r × n) 兩個瘦矩陣的乘積，
+        參數從 <b>m·n</b> 降到 <b>r·(m + n)</b>。最佳的近似可以用 <b>SVD（奇異值分解）</b>求得。
+      </div>
+
+      <div class="formula">
+        A = U Σ Vᵀ = σ₁u₁v₁ᵀ + σ₂u₂v₂ᵀ + … 　→　A<sub>r</sub> = Σ<sub>k=1..r</sub> σ<sub>k</sub> u<sub>k</sub> v<sub>k</sub>ᵀ
+        <span class="note">σ₁ ≥ σ₂ ≥ … ≥ 0 是奇異值，代表每個「成分」的重要程度。只保留前 r 個，就是 Frobenius 範數意義下最好的 rank-r 近似（Eckart–Young 定理）。
+          相對誤差 = √(Σ<sub>k&gt;r</sub> σ<sub>k</sub>²) / √(Σ σ<sub>k</sub>²)。</span>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 7：用 SVD 壓縮一張圖（圖片就是一個 128 × 128 的矩陣）</div>
+        <div class="controls">
+          <div class="control"><label for="lrRank">保留的秩 r <output for="lrRank"></output></label>
+            <input type="range" id="lrRank" min="1" max="128" step="1" value="8"></div>
+          <div class="btn-row">
+            <label class="btn small" style="cursor:pointer">📁 上傳自己的圖片<input type="file" id="lrUpload" accept="image/*" hidden></label>
+            <button class="btn small" id="lrDemo">↺ 示範圖</button>
+          </div>
+        </div>
+        <p class="caption" id="lrStatus">捲動到這裡時開始計算…</p>
+        <div class="img-pair">
+          <div><canvas id="lrOrig"></canvas><p class="caption">原圖（灰階 128×128）</p></div>
+          <div><canvas id="lrRec"></canvas><p class="caption" id="lrRecCap"></p></div>
+        </div>
+        <div class="metrics" id="lrMetrics"></div>
+        <div class="canvas-box"><canvas id="lrSpec" style="height:180px"></canvas></div>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 動手觀察</span>
+        <ol>
+          <li>r = 1：只剩一組 u·vᵀ，畫面變成「列向量 × 行向量」的格子狀 —— 這就是 rank-1 矩陣的樣子。</li>
+          <li>r 從 1 拉到 16：圓形與大塊漸層很快就出現（低秩結構），但右下的斜條紋需要很多成分才清楚（高秩結構）。</li>
+          <li>看奇異值曲線：衰減得越快，代表越適合低秩壓縮。</li>
+          <li>r 超過 64 時參數反而比原圖多（128·128 &lt; r·257），壓縮失去意義。</li>
+        </ol>
+      </div>
+
+      <h3>應用到神經網路</h3>
+      <p>全連接層 y = Wx，W 是 d<sub>out</sub> × d<sub>in</sub>。分解成 W ≈ U<sub>r</sub>·V<sub>r</sub> 後，等於把一層拆成兩層：
+        先 V<sub>r</sub>x（降到 r 維），再乘 U<sub>r</sub>。參數與計算量都從 d<sub>out</sub>·d<sub>in</sub> 降到 r·(d<sub>out</sub> + d<sub>in</sub>)。</p>
+      <div class="card">
+        <div class="demo-title">實驗 8：一層要分解到多小才划算？</div>
+        <div class="controls">
+          <div class="control"><label for="lrIn"><span>d<sub>in</sub>（輸入維度）</span> <output for="lrIn"></output></label>
+            <input type="range" id="lrIn" min="256" max="16384" step="256" value="4096"></div>
+          <div class="control"><label for="lrOut"><span>d<sub>out</sub>（輸出維度）</span> <output for="lrOut"></output></label>
+            <input type="range" id="lrOut" min="256" max="16384" step="256" value="4096"></div>
+          <div class="control"><label for="lrR">秩 r <output for="lrR"></output></label>
+            <input type="range" id="lrR" min="1" max="4096" step="1" value="8"></div>
+        </div>
+        <div class="metrics" id="lrCalc"></div>
+      </div>
+
+      <h3>LoRA：低秩的另一種用法</h3>
+      <p>LoRA（Hu 等人，2021）不是用來壓縮原模型，而是讓<b>微調</b>變便宜：凍結原本的 W，只學一個低秩的修正量。</p>
+      <div class="formula">W′ = W + ΔW = W + B·A，　B ∈ ℝ<sup>d×r</sup>，A ∈ ℝ<sup>r×k</sup>，r ≪ d
+        <span class="note">4096 × 4096 的層、r = 8：只需訓練 8 × (4096 + 4096) = 65,536 個參數，是原本 1677 萬的 0.39%（上面計算器的預設值就是這個例子）。
+          QLoRA 更進一步把凍結的 W 量化成 4-bit（NF4），讓單張消費級 GPU 也能微調數百億參數的模型。</span></div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        「所有權重矩陣都像照片一樣低秩」—— 訓練好的神經網路權重，奇異值往往衰減得沒那麼快，直接截斷常會明顯掉準確度，
+        通常需要搭配微調或蒸餾。低秩分解在嵌入層、注意力投影層等特定層效果較好。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 一個 1000 × 1000 的矩陣分解成 rank 50，兩個因子矩陣總共有多少參數？</p>
+          <ol class="opts"><li>50,000</li><li>100,000</li><li>500,000</li><li>1,000,000</li></ol>
+          <div class="explain">(1000 × 50) + (50 × 1000) = 100,000，是原本 100 萬的 10%。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>2. m × n 矩陣做 rank-r 分解，r 必須小於多少才能減少參數？</p>
+          <ol class="opts"><li>min(m, n)</li><li>m + n</li><li>√(mn)</li><li>mn / (m + n)</li></ol>
+          <div class="explain">需要 r(m + n) &lt; mn，即 r &lt; mn/(m + n)。方陣 n × n 時是 n/2。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. LoRA 主要解決的問題是？</p>
+          <ol class="opts"><li>讓微調大模型時只需訓練與儲存很少的參數</li><li>讓推論時模型變小</li><li>移除離群值</li><li>取代量化</li></ol>
+          <div class="explain">LoRA 凍結原模型、只訓練低秩修正量 BA，所以微調的記憶體與儲存成本大幅下降；推論時原模型大小不變（BA 可以合併回 W）。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="lab">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 7</span></div>
+      <h2>綜合實驗室：親手壓縮一個神經網路</h2>
+
+      <div class="box tldr"><span class="box-title">這個實驗在做什麼</span>
+        瀏覽器會先訓練一個小型神經網路（2 → 32 → 32 → 類別數，tanh 啟動函數，約 1,200 個參數）來分類平面上的點。
+        接著你可以<b>剪枝</b>、<b>量化</b>它，觀察決策邊界與準確率的變化，再按「微調」讓它在壓縮狀態下重新學習（剪枝後微調 / 使用 STE 的 QAT）。
+      </div>
+
+      <div class="card">
+        <div class="controls">
+          <div class="control"><span class="label">資料集（切換會重新訓練）</span>
+            <div class="seg" id="labData">
+              <button data-value="spiral" class="active">螺旋（3 類）</button>
+              <button data-value="moons">雙月（2 類）</button>
+              <button data-value="circles">同心圓（2 類）</button>
+            </div></div>
+        </div>
+        <div class="controls">
+          <div class="control"><span class="label">量化（每個輸出通道一個 scale）</span>
+            <div class="seg" id="labBits">
+              <button data-value="32" class="active">FP32</button>
+              <button data-value="8">INT8</button>
+              <button data-value="6">INT6</button>
+              <button data-value="4">INT4</button>
+              <button data-value="3">INT3</button>
+              <button data-value="2">INT2（三值）</button>
+            </div></div>
+          <div class="control"><label for="labSparsity">剪枝第 2 層（剪掉最小的權重）<output for="labSparsity"></output></label>
+            <input type="range" id="labSparsity" min="0" max="95" step="5" value="0"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="labFinetune">🔧 在目前壓縮設定下微調 300 步</button>
+          <button class="btn" id="labRestore">↺ 還原成未微調的 FP32 權重</button>
+          <button class="btn" id="labRecord">📌 記錄這次結果</button>
+          <button class="btn" id="labRetrain">重新訓練原始模型</button>
+        </div>
+        <p class="caption" id="labStatus"><span class="status-dot"></span>捲動到這裡時開始訓練…</p>
+        <div class="metrics" id="labMetrics"></div>
+        <div class="lab-grid">
+          <div>
+            <div class="canvas-box"><canvas id="labCanvas" style="aspect-ratio:1"></canvas></div>
+            <p class="caption">背景顏色 = 模型的預測（越深越有把握），圓點 = 訓練資料。</p>
+          </div>
+          <div>
+            <h4 style="margin-top:0">第 2 層權重（32 × 32）</h4>
+            <div class="canvas-box"><canvas id="labHeat" style="height:220px"></canvas></div>
+            <p class="caption">紅 = 負、藍 = 正、灰 = 剪掉。量化後顏色會變成少數幾種。</p>
+            <h4>所有非零權重的分佈</h4>
+            <div class="canvas-box"><canvas id="labHist" style="height:110px"></canvas></div>
+            <h4>操作紀錄</h4>
+            <div class="lab-log" id="labLog"></div>
+          </div>
+        </div>
+        <div class="table-wrap" id="labRecordsWrap" hidden>
+          <h4>我的實驗紀錄</h4>
+          <table><thead><tr><th>資料集</th><th>設定</th><th class="num">測試準確率</th><th class="num">大小</th><th class="num">壓縮比</th></tr></thead>
+            <tbody id="labRecords"></tbody></table>
+        </div>
+        <p class="caption">剪枝只作用在中間的 32×32 層（約佔全部權重的 86%）；輸入層與輸出層很小又敏感，實務上也常保留不剪。<br>大小計算：非零權重 × 位元數 + 偏差（FP32）+ 每通道 FP16 scale + 被剪的層每個權重 1 bit 的稀疏遮罩。</p>
+      </div>
+
+      <div class="box tryit"><span class="box-title">🔍 建議實驗（依序做做看）</span>
+        <ol>
+          <li><b>INT8</b>：準確率幾乎不變 → 8-bit PTQ 通常「免費」。</li>
+          <li><b>INT4、INT3、INT2</b>：一路往下調，找出準確率崩壞的位置 → 極低位元直接量化（PTQ）會壞掉。</li>
+          <li>停在 <b>INT2</b>，按「微調」→ 準確率回升，這就是 <b>QAT</b>（前向用量化權重、反向用 STE）。</li>
+          <li>回到 FP32，剪枝拉到 <b>80–90%</b>，再按「微調」→ 看剩下的少數權重如何補位。</li>
+          <li><b>組合</b>：剪枝 70% + INT4，再微調。記錄壓縮比與準確率，和單一方法比較。</li>
+          <li>換成「同心圓」資料集：簡單的問題能承受更激進的壓縮嗎？</li>
+        </ol>
+      </div>
+      <div class="box pitfall"><span class="box-title">⚠️ 誠實說明</span>
+        這是一個極小的玩具模型（約 1,200 個參數），數字不能直接套用到大模型上。大模型的參數冗餘程度高得多，通常能承受更高的壓縮比；
+        但它們也有玩具模型沒有的難題（例如啟動值離群值）。這個實驗的目的是建立<b>直覺</b>：壓縮會造成誤差，而重新訓練能讓模型適應誤差。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗（做完上面的實驗再回答）</div>
+        <div class="q" data-answer="2">
+          <p>1. 在實驗室中，量化到 INT2 後再「微調」，這個過程對應到哪一種技術？</p>
+          <ol class="opts"><li>PTQ</li><li>知識蒸餾</li><li>QAT（量化感知訓練）</li><li>低秩分解</li></ol>
+          <div class="explain">微調時前向傳播使用量化後的權重，梯度透過 STE 更新高精度主權重，正是 QAT。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. 為什麼剪枝 50% 時，實驗室算出的模型大小沒有直接減半（FP32 下）？</p>
+          <ol class="opts"><li>因為程式有錯</li><li>因為還要儲存「哪些位置非零」的稀疏遮罩，以及不剪枝的偏差</li><li>因為剪掉的權重仍然佔空間</li><li>因為量化抵銷了剪枝</li></ol>
+          <div class="explain">稀疏不是免費的：位置資訊需要額外空間（這裡用每個權重 1 bit 的遮罩估算）。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="summary">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 8</span></div>
+      <h2>總結與選擇指南</h2>
+
+      <div class="table-wrap">
+        <table>
+          <tr><th>技術</th><th>減少了什麼</th><th>典型壓縮</th><th>需要重新訓練？</th><th>加速條件</th></tr>
+          <tr><td>🔢 量化</td><td>每個參數的位元數</td><td>2–8×（FP32→INT8 為 4×）</td><td>PTQ 不用；QAT 要</td><td>省頻寬即有效；計算加速需低位元指令</td></tr>
+          <tr><td>✂️ 剪枝</td><td>參數數量（變稀疏）</td><td>依任務 1.5–10×</td><td>通常需要微調</td><td>結構化或 N:M 稀疏</td></tr>
+          <tr><td>👩‍🏫 蒸餾</td><td>模型架構（換成小模型）</td><td>依學生架構而定</td><td>需要（訓練學生）</td><td>學生本身就是小的稠密模型</td></tr>
+          <tr><td>🧩 低秩分解</td><td>矩陣的秩</td><td>依層而異</td><td>通常需要微調</td><td>r 夠小時直接變成兩個小矩陣乘法</td></tr>
+        </table>
+      </div>
+
+      <h3>我該用哪一種？</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>情境</th><th>建議起點</th></tr>
+          <tr><td>想在自己的筆電 / 單張 GPU 跑開源 LLM</td><td>直接下載現成的 4-bit 權重量化版本（GGUF、AWQ、GPTQ）</td></tr>
+          <tr><td>伺服器部署 LLM，要提高吞吐量</td><td>FP8 或 INT8（W8A8，如 SmoothQuant），搭配支援的推論引擎</td></tr>
+          <tr><td>手機上的影像模型，要求低延遲</td><td>INT8 QAT；必要時結構化剪枝通道</td></tr>
+          <tr><td>想要一個「本質上就小」的模型</td><td>知識蒸餾到較小的架構，再量化</td></tr>
+          <tr><td>預算有限，想微調大模型</td><td>LoRA / QLoRA</td></tr>
+        </table>
+      </div>
+
+      <h3>組合使用：經典流程</h3>
+      <div class="flow">
+        <div class="node">大模型</div><span class="arrow">→</span>
+        <div class="node hi">蒸餾 / 結構化剪枝<small>得到小架構</small></div><span class="arrow">→</span>
+        <div class="node hi">微調<small>恢復能力</small></div><span class="arrow">→</span>
+        <div class="node hi">量化<small>PTQ 或 QAT</small></div><span class="arrow">→</span>
+        <div class="node">部署</div>
+      </div>
+      <p>經典的 Deep Compression（Han 等人，2016）就是「剪枝 → 量化 → 霍夫曼編碼」三段式，把 AlexNet、VGG-16 壓縮了 35–49 倍而不損失準確度。</p>
+
+      <div class="box recap"><span class="box-title">📌 全課程回顧</span>
+        <ul>
+          <li><b>大小 = 參數數 × 位元數</b>；LLM 逐字生成受限於頻寬，所以壓縮直接帶來加速。</li>
+          <li><b>量化</b>：x̂ = s(q − z)；位元越少誤差越大，離群值是大敵，用細粒度、截斷、SmoothQuant / AWQ 等方法對付。</li>
+          <li><b>剪枝</b>：剪小權重；非結構化最準，結構化 / N:M 才好加速；剪完要微調。</li>
+          <li><b>蒸餾</b>：學生模仿老師的軟標籤，溫度 T 讓暗知識浮現。</li>
+          <li><b>低秩</b>：SVD 截斷是最佳低秩近似；r &lt; mn/(m+n) 才划算；LoRA 是低秩用於微調。</li>
+          <li>壓縮會帶來誤差，<b>重新訓練（微調、QAT、蒸餾）是讓模型適應誤差的通用解法</b>。</li>
+        </ul>
+      </div>
+
+      <h3>術語表</h3>
+      <dl class="glossary">
+        <dt>Scale（縮放係數）</dt><dd>相鄰量化刻度之間的距離，用來把整數還原成實數。</dd>
+        <dt>Zero-point（零點）</dt><dd>非對稱量化中，實數 0 對應到的整數。</dd>
+        <dt>Calibration（校準）</dt><dd>PTQ 中用少量資料統計數值範圍，以決定 scale 與截斷範圍。</dd>
+        <dt>Outlier（離群值）</dt><dd>遠大於其他值的少數數值，會撐大量化範圍。</dd>
+        <dt>SQNR</dt><dd>訊號量化雜訊比，衡量量化品質，單位 dB，每多 1 bit 約 +6 dB。</dd>
+        <dt>STE</dt><dd>直通估計器，反向傳播時把量化函數的導數視為 1。</dd>
+        <dt>Sparsity（稀疏度）</dt><dd>值為 0 的權重所佔的比例。</dd>
+        <dt>N:M 稀疏</dt><dd>每 M 個連續權重中最多保留 N 個非零值，例如 2:4。</dd>
+        <dt>Logits</dt><dd>softmax 之前的原始分數。</dd>
+        <dt>Temperature（溫度）</dt><dd>softmax 前把 logits 除以 T，T 越大分佈越平滑。</dd>
+        <dt>Rank（秩）</dt><dd>矩陣中線性獨立的列（行）數量，可理解為「真正的資訊維度」。</dd>
+        <dt>Memory-bound</dt><dd>效能受限於資料搬運速度而非計算速度的狀態。</dd>
+      </dl>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 期末綜合測驗</div>
+        <div class="q" data-answer="3">
+          <p>1. 你想在 8 GB 顯示卡上執行一個 13B 參數的 LLM，最直接可行的做法是？</p>
+          <ol class="opts"><li>使用 FP16</li><li>2:4 剪枝</li><li>LoRA 微調</li><li>4-bit 權重量化（約 6.5–7 GB）</li></ol>
+          <div class="explain">13×10⁹ × 4 bits ≈ 6.5 GB（加上 scale 略多），勉強放得下；FP16 要 26 GB。2:4 剪枝在一般格式下最多省一半，而且需要特定支援；LoRA 不會讓模型變小。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 下列哪一個敘述是<b>錯誤</b>的？</p>
+          <ol class="opts">
+            <li>非結構化剪枝 50% 一定會讓 GPU 推論快 2 倍</li>
+            <li>對稱量化的 zero-point 為 0</li>
+            <li>知識蒸餾需要訓練學生模型</li>
+            <li>rank-r 分解在 r 太大時參數會比原本還多</li>
+          </ol>
+          <div class="explain">非結構化稀疏需要專門的格式與 kernel，一般稠密運算不會跳過 0，通常無法直接加速。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>3. 為什麼 4-bit LLM 量化大多採用 per-group（例如 g = 128）而不是 per-tensor？</p>
+          <ol class="opts"><li>per-tensor 不能在 GPU 上執行</li><li>per-group 檔案比較小</li><li>每組有自己的 scale，能把離群值的影響侷限在小範圍，大幅降低誤差</li><li>per-group 不需要 scale</li></ol>
+          <div class="explain">4-bit 只有 15 個刻度，對範圍非常敏感；分組後每組各自決定範圍，代價是平均多約 0.125 bit。</div>
+        </div>
+      </div>
+
+      <h3>延伸閱讀（原始論文）</h3>
+      <ul class="refs">
+        <li>Hinton, Vinyals, Dean (2015). <a href="https://arxiv.org/abs/1503.02531" target="_blank" rel="noopener">Distilling the Knowledge in a Neural Network</a></li>
+        <li>Han, Mao, Dally (2016). <a href="https://arxiv.org/abs/1510.00149" target="_blank" rel="noopener">Deep Compression</a></li>
+        <li>Jacob et al. (2018). <a href="https://arxiv.org/abs/1712.05877" target="_blank" rel="noopener">Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference</a></li>
+        <li>Frankle, Carbin (2019). <a href="https://arxiv.org/abs/1803.03635" target="_blank" rel="noopener">The Lottery Ticket Hypothesis</a></li>
+        <li>Sanh et al. (2019). <a href="https://arxiv.org/abs/1910.01108" target="_blank" rel="noopener">DistilBERT</a></li>
+        <li>Hu et al. (2021). <a href="https://arxiv.org/abs/2106.09685" target="_blank" rel="noopener">LoRA: Low-Rank Adaptation of Large Language Models</a></li>
+        <li>Dettmers et al. (2022). <a href="https://arxiv.org/abs/2208.07339" target="_blank" rel="noopener">LLM.int8()</a></li>
+        <li>Frantar et al. (2022). <a href="https://arxiv.org/abs/2210.17323" target="_blank" rel="noopener">GPTQ</a></li>
+        <li>Xiao et al. (2022). <a href="https://arxiv.org/abs/2211.10438" target="_blank" rel="noopener">SmoothQuant</a></li>
+        <li>Lin et al. (2023). <a href="https://arxiv.org/abs/2306.00978" target="_blank" rel="noopener">AWQ</a></li>
+        <li>Dettmers et al. (2023). <a href="https://arxiv.org/abs/2305.14314" target="_blank" rel="noopener">QLoRA</a></li>
+      </ul>
+    </section>
+
+  </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/formats.js"></script>
+<script src="js/quant.js"></script>
+<script src="js/quantadv.js"></script>
+<script src="js/prune.js"></script>
+<script src="js/distill.js"></script>
+<script src="js/lowrank.js"></script>
+<script src="js/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IEEE 754 浮點數大冒險｜半精度・單精度・雙精度互動教學</title>
+  <meta name="description" content="用互動遊戲學會 IEEE 754：半精度 (binary16)、單精度 (binary32)、雙精度 (binary64) 的編碼、解碼、特殊值、捨入與精度陷阱。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔢</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // 在畫面出現前套用主題，避免閃爍
+    (function () {
+      try {
+        var t = localStorage.getItem('ieee754-theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="read-progress" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#top">🔢 IEEE 754 大冒險</a>
+    <nav class="topnav" aria-label="章節">
+      <a href="#ch1">1 為什麼</a>
+      <a href="#ch2">2 構造</a>
+      <a href="#ch3">3 迷你玩具</a>
+      <a href="#ch4">4 編碼</a>
+      <a href="#ch5">5 解碼遊樂場</a>
+      <a href="#ch6">6 特殊值</a>
+      <a href="#ch7">7 精度</a>
+      <a href="#ch8">8 闖關</a>
+      <a href="#ch9">9 小抄</a>
+    </nav>
+    <button id="theme-toggle" class="icon-btn" type="button" aria-label="切換深色/淺色主題" title="切換主題">🌓</button>
+  </header>
+
+  <main id="top">
+    <!-- ================= HERO ================= -->
+    <section class="hero">
+      <p class="eyebrow">互動式教學 · 半精度 / 單精度 / 雙精度</p>
+      <h1>IEEE 754 浮點數大冒險</h1>
+      <p class="lead">電腦只有 0 和 1，卻要裝下 <b>0.1</b>、<b>3.14159</b>、<b>6.02×10<sup>23</sup></b>，甚至 <b>∞</b> 和 <b>NaN</b>。<br>
+        這份教學帶你<strong>親手撥動每一個位元</strong>，搞懂這套全世界電腦都在用的規則。</p>
+      <div class="hero-bits" id="hero-bits" aria-hidden="true"></div>
+      <p class="hero-caption" id="hero-caption"></p>
+      <div class="hero-cards">
+        <div class="mini-card"><span class="tag t-half">半精度</span><b>16 位元</b><small>binary16 · AI / 繪圖</small></div>
+        <div class="mini-card"><span class="tag t-single">單精度</span><b>32 位元</b><small>binary32 · C 的 float</small></div>
+        <div class="mini-card"><span class="tag t-double">雙精度</span><b>64 位元</b><small>binary64 · JS / Python 的數字</small></div>
+      </div>
+      <a class="btn primary big" href="#ch1">開始冒險 ↓</a>
+    </section>
+
+    <!-- ================= CH1 ================= -->
+    <section id="ch1" class="chapter">
+      <h2><span class="ch-num">第 1 章</span>為什麼需要「浮點數」？</h2>
+
+      <p>假設你只有 8 個格子可以寫數字，而且小數點的位置<strong>固定</strong>在中間（這叫<b>定點數</b>）：</p>
+      <div class="fixed-demo">
+        <div class="fixed-row"><span>0012</span><span class="dot">.</span><span>3400</span><em>→ 12.34 ✅ 沒問題</em></div>
+        <div class="fixed-row"><span>9999</span><span class="dot">.</span><span>9999</span><em>→ 最大只能到 9999.9999 😢</em></div>
+        <div class="fixed-row"><span>0000</span><span class="dot">.</span><span>0000</span><em>→ 0.00000123 直接變成 0 😭</em></div>
+      </div>
+      <p>範圍和精度只能二選一。科學家早就有解法——<b>科學記號</b>：</p>
+
+      <div class="callout">
+        <div class="sci-big">
+          <span class="part-m">6.02</span> × 10<sup class="part-e">23</sup>
+        </div>
+        <p><span class="hl-m">有效數字</span>負責「精確度」，<span class="hl-e">指數</span>負責「大小（範圍）」。小數點的位置跟著指數<b>浮動</b>，所以叫做<b>浮點數 (floating point)</b>！</p>
+      </div>
+
+      <p>電腦用的是<b>二進位</b>，所以浮點數其實就是「二進位的科學記號」：</p>
+      <div class="formula">± <span class="hl-m">1.xxxxx</span><sub>₂</sub> × 2<sup class="hl-e">指數</sup></div>
+
+      <div class="widget" id="w-float-point">
+        <div class="widget-title">🎮 玩玩看：讓小數點「浮動」</div>
+        <p class="hint">拖動滑桿改變指數，看小數點如何左右移動。同樣的 <code>1011</code> 四個位元，可以變成很大或很小的數！</p>
+        <div class="fp-display" id="fp-display"></div>
+        <label class="slider-row">指數 <input type="range" id="fp-exp" min="-6" max="8" value="0"> <output id="fp-exp-out">0</output></label>
+        <div class="fp-result" id="fp-result"></div>
+      </div>
+
+      <div class="widget" id="w-sci">
+        <div class="widget-title">🔍 科學記號翻譯機</div>
+        <p class="hint">輸入任何數字，看它的十進位與二進位科學記號長什麼樣子。</p>
+        <div class="input-row">
+          <input type="text" id="sci-input" value="13.25" inputmode="decimal" aria-label="輸入數字">
+          <div class="chips" id="sci-chips"></div>
+        </div>
+        <div id="sci-out" class="sci-out"></div>
+      </div>
+
+      <div class="note">💡 <b>二進位小數怎麼讀？</b> 小數點右邊的位數依序代表 ½、¼、⅛、1/16……。例如 <code>0.101₂ = ½ + ⅛ = 0.625</code>。</div>
+    </section>
+
+    <!-- ================= CH2 ================= -->
+    <section id="ch2" class="chapter">
+      <h2><span class="ch-num">第 2 章</span>三兄弟的身體構造</h2>
+      <p>IEEE 754 把一串位元切成三段：</p>
+
+      <div class="anatomy-legend">
+        <div class="part-card sign"><b>S 符號位 (Sign)</b><p>1 個位元。<code>0</code> = 正、<code>1</code> = 負。</p></div>
+        <div class="part-card exp"><b>E 指數 (Exponent)</b><p>決定數字在「哪一層樓」——也就是大小範圍。</p></div>
+        <div class="part-card frac"><b>F 尾數 (Fraction / Mantissa)</b><p>決定在那一層樓的「哪個房間」——也就是精確位置。</p></div>
+      </div>
+
+      <div class="formula big">
+        值 = (−1)<sup class="hl-s">S</sup> × <span class="hl-m">1.F</span><sub>₂</sub> × 2<sup><span class="hl-e">E</span> − 偏差值</sup>
+      </div>
+
+      <div class="format-bars" id="format-bars"></div>
+
+      <h3>📋 規格總表</h3>
+      <div class="table-wrap"><table class="spec-table" id="spec-table"></table></div>
+      <p class="small muted">表格中的數值是由本頁的程式依照規格即時計算出來的，可以放心引用。</p>
+
+      <h3>🤔 兩個聰明的小設計</h3>
+      <div class="two-col">
+        <div class="card">
+          <h4>① 隱藏的 1（hidden bit）</h4>
+          <p>二進位科學記號正規化後，小數點前面<strong>一定是 1</strong>（不像十進位可能是 1~9）。既然一定是 1，就<b>不用存</b>！</p>
+          <p>所以單精度明明只存 23 位尾數，卻有 <b>24 位</b>精度，白賺一位 🎁。</p>
+          <div class="mono-box">1.<span class="hl-m">0101</span> × 2<sup>3</sup> → 只存 <span class="hl-m">0101…</span></div>
+        </div>
+        <div class="card">
+          <h4>② 偏差值（bias）</h4>
+          <p>指數可以是負的（例如 2<sup>−3</sup>），但指數欄位存的是<b>無號整數</b>。解法：存「實際指數 + 偏差值」。</p>
+          <p>偏差值 = 2<sup>(指數位數−1)</sup> − 1 → 半精度 15、單精度 127、雙精度 1023。</p>
+          <p class="small">好處：正數的位元直接當整數比大小，順序就和數值大小一致！</p>
+        </div>
+      </div>
+
+      <div class="widget" id="w-bias">
+        <div class="widget-title">🎚️ 偏差值轉換器</div>
+        <div class="tabs" id="bias-tabs" role="tablist"></div>
+        <label class="slider-row">實際指數 <input type="range" id="bias-slider"> <output id="bias-out"></output></label>
+        <div id="bias-result" class="bias-result"></div>
+      </div>
+
+      <div class="callout building">
+        <p>🏢 <b>大樓比喻</b>：把所有正數想成一棟大樓。</p>
+        <ul>
+          <li><b>指數</b> = 樓層。第 E 層包含 [2<sup>E</sup>, 2<sup>E+1</sup>) 這段範圍。</li>
+          <li><b>尾數</b> = 房號。每層都被<b>平均切成 2<sup>尾數位數</sup> 個房間</b>（半精度 1024 間、單精度約 838 萬間）。</li>
+          <li>樓層越高，範圍越寬，但房間數一樣 → <b>房間越大，越不精確</b>。這就是浮點數「越大越粗糙」的原因！</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= CH3 ================= -->
+    <section id="ch3" class="chapter">
+      <h2><span class="ch-num">第 3 章</span>迷你浮點數玩具：親眼看見「大樓」</h2>
+      <p>真正的格式有幾十億個數，看不完。我們先造一個<b>迷你版</b>：只有幾個位元，規則與 IEEE 754 完全相同。每一個可表示的數都畫在數線上。</p>
+
+      <div class="widget" id="w-mini">
+        <div class="widget-title">🧸 迷你浮點數實驗室</div>
+        <div class="mini-controls">
+          <label class="slider-row">指數位數 <input type="range" id="mini-e" min="2" max="4" value="3"> <output id="mini-e-out">3</output></label>
+          <label class="slider-row">尾數位數 <input type="range" id="mini-f" min="1" max="4" value="2"> <output id="mini-f-out">2</output></label>
+        </div>
+        <p class="hint">點下面的位元切換 0/1，或直接點數線上的點。</p>
+        <div id="mini-bits" class="bitview-host"></div>
+        <div id="mini-explain" class="explain"></div>
+        <div class="zoom-row">
+          <span>數線範圍：</span>
+          <button class="btn small toggle active" data-zoom="all" type="button">全部</button>
+          <button class="btn small toggle" data-zoom="4" type="button">放大 0~4</button>
+          <button class="btn small toggle" data-zoom="1" type="button">放大 0~1</button>
+        </div>
+        <div id="mini-line" class="numberline"></div>
+        <div id="mini-stats" class="small muted"></div>
+      </div>
+
+      <div class="observe">
+        <h4>👀 你觀察到了嗎？</h4>
+        <ol>
+          <li>點在 0 附近<b>很密</b>，越往右越<b>稀疏</b>——每過一個 2 的次方，間距就翻倍。</li>
+          <li>每一「層」（同一顏色的區段）點的數量都一樣多。</li>
+          <li>最左邊那些灰色點是<b>次正規數</b>，它們把 0 和最小的正規化數之間均勻填滿（第 6 章會講）。</li>
+          <li>試試把尾數位數調大：每層的點變多 → <b>精度提高</b>。把指數位數調大：層數變多 → <b>範圍變大</b>。</li>
+        </ol>
+        <p>半精度 / 單精度 / 雙精度，其實就是「指數幾位、尾數幾位」的不同取捨而已！</p>
+      </div>
+    </section>
+
+    <!-- ================= CH4 ================= -->
+    <section id="ch4" class="chapter">
+      <h2><span class="ch-num">第 4 章</span>手把手：十進位 → IEEE 754</h2>
+      <p>把一個十進位數字存進浮點數，總共 6 步。輸入一個數字並選擇格式，下面會<b>即時展開每一步的計算過程</b>。</p>
+
+      <div class="widget" id="w-encode">
+        <div class="widget-title">🧮 逐步編碼器</div>
+        <div class="input-row">
+          <input type="text" id="enc-input" value="-6.625" inputmode="decimal" aria-label="輸入要編碼的十進位數">
+          <div class="tabs" id="enc-tabs" role="tablist"></div>
+        </div>
+        <div class="chips" id="enc-chips"></div>
+        <div id="enc-steps" class="steps"></div>
+      </div>
+
+      <div class="note">📝 <b>考試小技巧</b>：手算時，先把整數部分「除以 2 取餘數、由下往上讀」，小數部分「乘以 2 取整數、由上往下讀」，再把小數點移到第一個 1 後面，就完成一半了。</div>
+    </section>
+
+    <!-- ================= CH5 ================= -->
+    <section id="ch5" class="chapter">
+      <h2><span class="ch-num">第 5 章</span>解碼遊樂場：IEEE 754 → 十進位</h2>
+      <p>反過來，給你一串位元，怎麼知道它代表什麼數？<b>點擊任何位元</b>翻轉它，看看數值怎麼變化。</p>
+
+      <div class="widget playground" id="w-play">
+        <div class="widget-title">🕹️ 位元遊樂場</div>
+        <div class="tabs" id="play-tabs" role="tablist"></div>
+        <div id="play-bits" class="bitview-host"></div>
+        <div class="play-io">
+          <label>十六進位 <input type="text" id="play-hex" spellcheck="false" aria-label="十六進位"></label>
+          <label>輸入十進位 <input type="text" id="play-dec" inputmode="decimal" placeholder="例如 3.14" aria-label="輸入十進位"></label>
+        </div>
+        <div class="play-buttons">
+          <button class="btn small" type="button" data-act="down" title="上一個可表示的數">◀ 上一個數</button>
+          <button class="btn small" type="button" data-act="up" title="下一個可表示的數">下一個數 ▶</button>
+          <button class="btn small" type="button" data-act="mul">× 2</button>
+          <button class="btn small" type="button" data-act="div">÷ 2</button>
+          <button class="btn small" type="button" data-act="neg">± 取負</button>
+          <button class="btn small" type="button" data-act="rand">🎲 隨機</button>
+          <button class="btn small" type="button" data-act="clear">歸零</button>
+        </div>
+        <div class="chips" id="play-presets"></div>
+        <div id="play-explain" class="explain"></div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h4>🔑 解碼三步驟</h4>
+          <ol>
+            <li>看<b class="hl-e">指數欄位</b>：全 0？全 1？還是一般情況？（決定是哪一種數）</li>
+            <li>一般情況：實際指數 = 欄位值 − 偏差值</li>
+            <li>值 = (−1)<sup>S</sup> × <b>1</b>.F × 2<sup>實際指數</sup></li>
+          </ol>
+        </div>
+        <div class="card">
+          <h4>🧪 小任務</h4>
+          <ul class="tasks" id="play-tasks"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CH6 ================= -->
+    <section id="ch6" class="chapter">
+      <h2><span class="ch-num">第 6 章</span>特殊值動物園 🦁</h2>
+      <p>指數欄位的<b>全 0</b> 和<b>全 1</b> 這兩個極端值被保留下來，用來表示特別的東西：</p>
+
+      <div class="table-wrap">
+        <table class="zoo-table">
+          <thead><tr><th>種類</th><th>指數欄位</th><th>尾數欄位</th><th>代表的值</th><th></th></tr></thead>
+          <tbody id="zoo-body"></tbody>
+        </table>
+      </div>
+
+      <div class="zoo-grid">
+        <div class="card">
+          <h4>0️⃣ 正零與負零</h4>
+          <p>因為有符號位，所以有 <code>+0</code> 和 <code>−0</code> 兩種零！它們比較時相等（<code>+0 == −0</code>），但 <code>1/+0 = +∞</code>、<code>1/−0 = −∞</code>。</p>
+        </div>
+        <div class="card">
+          <h4>🐜 次正規數 (subnormal)</h4>
+          <p>指數全 0 時，隱藏位元變成 <b>0</b>，指數固定為 <b>1 − 偏差值</b>：值 = ±<b>0</b>.F × 2<sup>1−bias</sup>。</p>
+          <p>它們填補 0 與最小正規化數之間的空隙，讓數字「慢慢」變成 0（稱為<b>漸進式下溢</b>），代價是精度逐漸變少。</p>
+        </div>
+        <div class="card">
+          <h4>♾️ 無限大</h4>
+          <p>指數全 1、尾數全 0。超出最大值（<b>溢位</b>）或 <code>1/0</code> 就會得到它。∞ 也能參與運算：<code>∞ + 1 = ∞</code>。</p>
+        </div>
+        <div class="card">
+          <h4>👻 NaN（Not a Number）</h4>
+          <p>指數全 1、尾數非 0。代表「沒有意義的結果」，例如 <code>0/0</code>、<code>∞ − ∞</code>、<code>√−1</code>。</p>
+          <p><b>NaN 不等於任何東西，包括它自己</b>：<code>NaN == NaN</code> 是 false！</p>
+        </div>
+      </div>
+
+      <div class="widget" id="w-slide">
+        <div class="widget-title">🛝 下溢溜滑梯 & 🚀 溢位火箭</div>
+        <p class="hint">從 1 開始，不斷 ÷2 或 ×2，觀察數字如何經過次正規區變成 0，或衝上 ∞。</p>
+        <div class="tabs" id="slide-tabs" role="tablist"></div>
+        <div class="play-buttons">
+          <button class="btn small" type="button" id="slide-div">÷ 2</button>
+          <button class="btn small" type="button" id="slide-mul">× 2</button>
+          <button class="btn small" type="button" id="slide-auto-down">⏬ 自動滑到底</button>
+          <button class="btn small" type="button" id="slide-auto-up">⏫ 自動飛到頂</button>
+          <button class="btn small" type="button" id="slide-reset">重設為 1</button>
+        </div>
+        <div id="slide-bits" class="bitview-host"></div>
+        <div id="slide-status" class="slide-status"></div>
+        <div id="slide-log" class="slide-log"></div>
+      </div>
+
+      <div class="widget" id="w-lab">
+        <div class="widget-title">🧪 特殊值實驗台（雙精度 / JavaScript）</div>
+        <p class="hint">點擊算式，看看電腦真正算出什麼。先猜猜看再點！</p>
+        <div class="lab-grid" id="lab-grid"></div>
+      </div>
+    </section>
+
+    <!-- ================= CH7 ================= -->
+    <section id="ch7" class="chapter">
+      <h2><span class="ch-num">第 7 章</span>精度、捨入與經典陷阱</h2>
+
+      <h3>7.1 捨入規則：四捨五入？不完全是！</h3>
+      <p>尾數位數有限，放不下的位元必須捨入。IEEE 754 預設使用<b>「最接近、平手取偶數」(round half to even)</b>：</p>
+      <div class="two-col">
+        <div class="card">
+          <ul>
+            <li>比一半<b>小</b> → 捨去</li>
+            <li>比一半<b>大</b> → 進位</li>
+            <li><b>剛好一半</b> → 選最後一位是 <b>0（偶數）</b>的那個</li>
+          </ul>
+        </div>
+        <div class="card">
+          <p class="small">十進位類比（取到整數）：</p>
+          <p><code>2.4 → 2</code>　<code>2.6 → 3</code><br><code>2.5 → 2</code>　<code>3.5 → 4</code>　<code>4.5 → 4</code></p>
+          <p class="small muted">為什麼？傳統四捨五入遇到 .5 永遠往上，累積起來會偏大；取偶數則一半往上、一半往下，統計上不偏。</p>
+        </div>
+      </div>
+
+      <div class="widget" id="w-round">
+        <div class="widget-title">🔬 捨入顯微鏡</div>
+        <p class="hint">兩個相鄰的可表示數之間，其他數都必須「被吸」到其中一個。拖動滑桿，看看哪邊贏！</p>
+        <div class="input-row">
+          <label>在這個數附近觀察：<input type="text" id="round-base" value="1" inputmode="decimal"></label>
+          <div class="tabs" id="round-tabs" role="tablist"></div>
+        </div>
+        <div id="round-line" class="round-line"></div>
+        <input type="range" id="round-t" min="0" max="1000" value="300" aria-label="在兩個相鄰數之間的位置">
+        <div id="round-out" class="explain"></div>
+      </div>
+
+      <h3>7.2 浮點計算機：同一題，三種精度</h3>
+      <div class="widget" id="w-calc">
+        <div class="widget-title">🧾 三精度計算機</div>
+        <div class="calc-row">
+          <input type="text" id="calc-a" value="0.1" inputmode="decimal" aria-label="第一個數">
+          <select id="calc-op" aria-label="運算">
+            <option value="+">+</option><option value="-">−</option><option value="*">×</option><option value="/">÷</option>
+          </select>
+          <input type="text" id="calc-b" value="0.2" inputmode="decimal" aria-label="第二個數">
+        </div>
+        <div class="chips" id="calc-chips"></div>
+        <div id="calc-out"></div>
+      </div>
+
+      <h3>7.3 間距階梯：數字越大，格子越粗</h3>
+      <p>相鄰兩個可表示數的距離稱為 <b>ULP</b>（Unit in the Last Place）。下圖橫軸是數字大小、縱軸是 ULP（都是對數刻度）。每往右一層樓，ULP 就翻倍。</p>
+      <div class="widget viz-root" id="w-ulp">
+        <div class="widget-title">📈 ULP 隨數值大小的變化</div>
+        <div class="legend" id="ulp-legend"></div>
+        <div id="ulp-chart" class="chart"></div>
+        <div class="input-row">
+          <label>查查看這個數附近的間距：<input type="text" id="ulp-input" value="2048" inputmode="decimal"></label>
+        </div>
+        <div class="table-wrap"><table class="data-table" id="ulp-table"></table></div>
+      </div>
+
+      <h3>7.4 停滯的計數器</h3>
+      <div class="widget" id="w-acc">
+        <div class="widget-title">⏱️ 把 0.1 加 N 次</div>
+        <p class="hint">數學上答案是 N × 0.1。電腦每加一次就捨入一次，誤差會累積……甚至卡住！</p>
+        <label class="slider-row">N = <input type="range" id="acc-n" min="1" max="5" step="0.01" value="4"> <output id="acc-n-out"></output></label>
+        <div id="acc-out"></div>
+      </div>
+
+      <div class="observe">
+        <h4>🎯 整數的極限</h4>
+        <p>精度是 p 位，代表 2<sup>p</sup> 以內的整數都能精確表示，超過之後就會開始「跳號」：</p>
+        <ul>
+          <li>半精度（p = 11）：2048 之後，<code>2049</code> 存不下（會變 2048）</li>
+          <li>單精度（p = 24）：16,777,216 之後，<code>16777217</code> 存不下</li>
+          <li>雙精度（p = 53）：9,007,199,254,740,992 之後存不下 → 這就是 JavaScript 的 <code>Number.MAX_SAFE_INTEGER</code> = 2<sup>53</sup> − 1！</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= CH8 ================= -->
+    <section id="ch8" class="chapter">
+      <h2><span class="ch-num">第 8 章</span>闖關挑戰 🏆</h2>
+      <div class="quiz-header">
+        <div class="score-box"><span>分數</span><b id="q-score">0</b></div>
+        <div class="score-box"><span>連續答對</span><b id="q-streak">0</b></div>
+        <div class="score-box"><span>最佳紀錄</span><b id="q-best">0</b></div>
+        <div class="score-box"><span>等級</span><b id="q-level">🥚 新手</b></div>
+      </div>
+
+      <div class="widget quiz" id="w-quiz">
+        <div class="widget-title">❓ 隨機題目 <span class="q-type" id="q-type"></span></div>
+        <div id="q-body"></div>
+        <div id="q-choices" class="choices"></div>
+        <div id="q-feedback" class="feedback"></div>
+        <button class="btn primary" type="button" id="q-next">下一題 ▶</button>
+      </div>
+
+      <div class="widget" id="w-build">
+        <div class="widget-title">🧱 造數挑戰：用半精度拼出目標數字！</div>
+        <div class="build-target">目標：<b id="build-target"></b></div>
+        <div id="build-bits" class="bitview-host"></div>
+        <div id="build-now" class="build-now"></div>
+        <div class="play-buttons">
+          <button class="btn primary small" type="button" id="build-check">✅ 檢查</button>
+          <button class="btn small" type="button" id="build-hint">💡 提示</button>
+          <button class="btn small" type="button" id="build-new">🔄 換一題</button>
+        </div>
+        <div id="build-feedback" class="feedback"></div>
+      </div>
+    </section>
+
+    <!-- ================= CH9 ================= -->
+    <section id="ch9" class="chapter">
+      <h2><span class="ch-num">第 9 章</span>重點小抄 & 常見陷阱</h2>
+
+      <div class="cheat">
+        <div class="card">
+          <h4>📌 一張表記住</h4>
+          <table class="data-table compact">
+            <thead><tr><th></th><th>半</th><th>單</th><th>雙</th></tr></thead>
+            <tbody>
+              <tr><td>S / E / F</td><td>1/5/10</td><td>1/8/23</td><td>1/11/52</td></tr>
+              <tr><td>偏差值</td><td>15</td><td>127</td><td>1023</td></tr>
+              <tr><td>精度 p</td><td>11</td><td>24</td><td>53</td></tr>
+              <tr><td>十進位位數</td><td>≈3</td><td>≈7</td><td>≈16</td></tr>
+              <tr><td>最大值</td><td>65504</td><td>≈3.4e38</td><td>≈1.8e308</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h4>🧭 解碼口訣</h4>
+          <ul>
+            <li><b>指數全 0</b>：尾數 0 → ±0；否則次正規 0.F × 2<sup>1−bias</sup></li>
+            <li><b>指數全 1</b>：尾數 0 → ±∞；否則 NaN</li>
+            <li><b>其他</b>：1.F × 2<sup>E−bias</sup></li>
+          </ul>
+          <h4>✍️ 編碼口訣</h4>
+          <p>轉二進位 → 正規化成 1.xxx × 2<sup>E</sup> → E + bias 存指數 → 小數點後取尾數（捨入取偶）→ 組合</p>
+        </div>
+      </div>
+
+      <h3>⚠️ 程式設計師必知陷阱</h3>
+      <div class="pitfalls">
+        <details open>
+          <summary>1. 不要用 <code>==</code> 比較浮點數</summary>
+          <pre><code>// ❌
+0.1 + 0.2 === 0.3            // false
+
+// ✅ 用容許誤差比較
+Math.abs(a - b) &lt;= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b))</code></pre>
+        </details>
+        <details>
+          <summary>2. 金額不要用浮點數</summary>
+          <p>0.1 元在二進位是無限循環小數。請用整數「分」來存，或用十進位型別（Python <code>decimal</code>、Java <code>BigDecimal</code>、C# <code>decimal</code>）。</p>
+        </details>
+        <details>
+          <summary>3. 大數加小數，小數會被「吃掉」</summary>
+          <pre><code>1e16 + 1 === 1e16            // true（雙精度）
+// 加總很多數時，先排序由小加到大，或使用 Kahan 補償求和</code></pre>
+        </details>
+        <details>
+          <summary>4. 檢查 NaN 要用專門函式</summary>
+          <pre><code>x === NaN          // 永遠 false ❌
+Number.isNaN(x)    // ✅ JavaScript
+math.isnan(x)      // ✅ Python
+isnan(x)           // ✅ C / C++</code></pre>
+        </details>
+        <details>
+          <summary>5. JavaScript 的整數不是無限大</summary>
+          <pre><code>9007199254740993           // 印出 9007199254740992
+Number.MAX_SAFE_INTEGER    // 9007199254740991 = 2^53 − 1
+// 更大的整數請用 BigInt：9007199254740993n</code></pre>
+        </details>
+        <details>
+          <summary>6. 半精度的範圍很小</summary>
+          <p>半精度最大只有 65504，訓練神經網路時很容易溢位成 ∞，所以常搭配「損失縮放 (loss scaling)」，或改用指數位數與單精度相同的 <b>bfloat16</b>（1/8/7）。</p>
+        </details>
+        <details>
+          <summary>7. 各語言的型別對照</summary>
+          <div class="table-wrap">
+            <table class="data-table compact">
+              <thead><tr><th>語言</th><th>半精度</th><th>單精度</th><th>雙精度</th></tr></thead>
+              <tbody>
+                <tr><td>C / C++</td><td><code>_Float16</code></td><td><code>float</code></td><td><code>double</code></td></tr>
+                <tr><td>Java</td><td><code>Float.float16ToFloat</code>（轉換）</td><td><code>float</code></td><td><code>double</code></td></tr>
+                <tr><td>Python</td><td><code>numpy.float16</code></td><td><code>numpy.float32</code></td><td><code>float</code></td></tr>
+                <tr><td>JavaScript</td><td><code>Float16Array</code></td><td><code>Float32Array</code></td><td><code>number</code></td></tr>
+                <tr><td>Rust</td><td><code>f16</code>（nightly / crate）</td><td><code>f32</code></td><td><code>f64</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="finale">
+        <h3>🎉 恭喜完成冒險！</h3>
+        <p>你已經學會了 IEEE 754 的構造、編碼、解碼、特殊值、捨入與精度。回到<a href="#ch8">闖關挑戰</a>刷新紀錄吧！</p>
+        <div class="progress-list" id="progress-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>IEEE 754 浮點數大冒險 · 純靜態網頁，所有運算都在你的瀏覽器中以 BigInt 精確計算。</p>
+    <p class="small muted">參考：IEEE Std 754-2019 · <a href="https://en.wikipedia.org/wiki/IEEE_754" target="_blank" rel="noopener">Wikipedia: IEEE 754</a> · <a href="https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html" target="_blank" rel="noopener">What Every Computer Scientist Should Know About Floating-Point Arithmetic</a></p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div>
+  <div id="confetti" aria-hidden="true"></div>
+
+  <script src="js/ieee.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+.agent-shell/
+.agents/
+.gemini/
+.DS_Store
+Thumbs.db

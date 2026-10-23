@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Technical Tutorials</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.25rem;
+    }
+    .container { max-width: 960px; width: 100%; }
+    header { text-align: center; margin-bottom: 2.5rem; }
+    h1 { font-size: 2.2rem; margin-bottom: 0.75rem; letter-spacing: -0.02em; }
+    p.subtitle { color: var(--muted); font-size: 1.05rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    }
+    .badge {
+      display: inline-block;
+      align-self: flex-start;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+    }
+    .card h2 { font-size: 1.3rem; line-height: 1.35; }
+    .card p { color: var(--muted); font-size: 0.95rem; line-height: 1.6; flex: 1; }
+    .enter {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📚 Interactive Technical Tutorials</h1>
+      <p class="subtitle">純前端、零相依性的互動式視覺化技術教學實驗室</p>
+    </header>
+    <main class="grid">
+      <a class="card" href="./aiflow/">
+        <span class="badge">/aiflow</span>
+        <h2>⚡ AI Flow 互動教學實驗室</h2>
+        <p>直覺拆解 LLM、Agent ReAct Loop、Skills 技能包、MCP 協定、Subagents 子代理與真實 Token 變化模擬。</p>
+        <span class="enter">進入教學 →</span>
+      </a>
+      <a class="card" href="./ieee754/">
+        <span class="badge">/ieee754</span>
+        <h2>🔢 IEEE 754 浮點數大冒險</h2>
+        <p>透過位元遊樂場與 BigInt 精確運算，動手掌握 binary16 / binary32 / binary64 編解碼、次正規數與捨入誤差。</p>
+        <span class="enter">進入教學 →</span>
+      </a>
+      <a class="card" href="./quant/">
+        <span class="badge">/quant</span>
+        <h2>🗜️ AI 模型壓縮技術互動教學</h2>
+        <p>在瀏覽器中親手實驗模型量化（PTQ / QAT / SmoothQuant）、結構化剪枝、知識蒸餾與 SVD 低秩分解。</p>
+        <span class="enter">進入教學 →</span>
+      </a>
+    </main>
+  </div>
+</body>
+</html>
