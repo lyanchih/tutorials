@@ -1,102 +1,1358 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant-TW" data-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactive Technical Tutorials</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI & Systems 智慧互動教學實驗室｜從底層位元、模型壓縮到 Agent 架構</title>
+  <meta name="description" content="從 IEEE 754 浮點數、AI 模型量化與壓縮，到 AI Agent / Skills / MCP Token 工程的純前端互動式教學中心。" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
   <style>
     :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
+      --bg: #080d1a;
+      --bg-elevated: #0f172a;
+      --card: rgba(19, 28, 49, 0.82);
+      --card-hover: rgba(26, 38, 66, 0.95);
+      --border: rgba(148, 163, 184, 0.16);
+      --border-strong: rgba(56, 189, 248, 0.45);
       --text: #f8fafc;
+      --text-secondary: #cbd5e1;
       --muted: #94a3b8;
-      --accent: #38bdf8;
+      --accent-cyan: #38bdf8;
+      --accent-indigo: #818cf8;
+      --accent-emerald: #34d399;
+      --accent-amber: #fbbf24;
+      --accent-rose: #fb7185;
+      --shadow: 0 20px 45px -15px rgba(2, 6, 23, 0.7);
+      --glow-cyan: 0 0 28px rgba(56, 189, 248, 0.18);
+      --code-bg: rgba(15, 23, 42, 0.9);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-elevated: #ffffff;
+      --card: rgba(255, 255, 255, 0.92);
+      --card-hover: #ffffff;
+      --border: rgba(15, 23, 42, 0.1);
+      --border-strong: rgba(2, 132, 199, 0.45);
+      --text: #0f172a;
+      --text-secondary: #334155;
+      --muted: #64748b;
+      --accent-cyan: #0284c7;
+      --accent-indigo: #4f46e5;
+      --accent-emerald: #059669;
+      --accent-amber: #d97706;
+      --accent-rose: #e11d48;
+      --shadow: 0 16px 36px -12px rgba(15, 23, 42, 0.08);
+      --glow-cyan: 0 0 24px rgba(2, 132, 199, 0.12);
+      --code-bg: #f1f5f9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
-      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Noto Sans TC", "PingFang TC", sans-serif;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 15% 12%, rgba(56, 189, 248, 0.10), transparent 32%),
+        radial-gradient(circle at 85% 18%, rgba(129, 140, 248, 0.10), transparent 34%),
+        radial-gradient(circle at 50% 88%, rgba(52, 211, 153, 0.07), transparent 38%),
+        linear-gradient(to right, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 40px 40px, 40px 40px;
       color: var(--text);
+      line-height: 1.65;
       min-height: 100vh;
+    }
+
+    /* ===== Topbar ===== */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-inner {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 0.85rem 1.5rem;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 2rem 1.25rem;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
     }
-    .container { max-width: 960px; width: 100%; }
-    header { text-align: center; margin-bottom: 2.5rem; }
-    h1 { font-size: 2.2rem; margin-bottom: 0.75rem; letter-spacing: -0.02em; }
-    p.subtitle { color: var(--muted); font-size: 1.05rem; }
-    .grid {
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
+      place-items: center;
+      font-size: 1.15rem;
+      box-shadow: var(--glow-cyan);
     }
-    .card {
+
+    .brand-tag {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .nav-pill {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      font-weight: 500;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      transition: all 0.18s ease;
+    }
+
+    .nav-pill:hover {
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    .theme-btn {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 0.42rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.18s ease;
+    }
+
+    .theme-btn:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    /* ===== Main Container ===== */
+    .container {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4.5rem;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      text-align: center;
+      max-width: 880px;
+      margin: 0.5rem auto 2.8rem;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      margin-bottom: 1.1rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 4.2vw, 3.25rem);
+      font-weight: 850;
+      line-height: 1.18;
+      letter-spacing: -0.025em;
+      margin-bottom: 1rem;
+    }
+
+    .grad-cyan {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .grad-amber {
+      background: linear-gradient(135deg, #34d399, #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p.lead {
+      color: var(--text-secondary);
+      font-size: clamp(1rem, 1.8vw, 1.16rem);
+      max-width: 740px;
+      margin: 0 auto 1.65rem;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: inline-grid;
+      grid-template-columns: repeat(4, auto);
+      gap: 1.5rem;
+      padding: 0.85rem 1.6rem;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 1.75rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 0 0.4rem;
+    }
+
+    .stat-num {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .stat-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    /* ===== Smart Search & Diagnostic Bar ===== */
+    .smart-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      margin-bottom: 2.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .smart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.1rem;
+    }
+
+    .smart-title {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      min-width: 260px;
+      max-width: 440px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 0.65rem 2.4rem 0.65rem 2.3rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--code-bg);
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.9rem;
+      pointer-events: none;
+    }
+
+    .search-shortcut {
+      position: absolute;
+      right: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.05rem 0.38rem;
+    }
+
+    .advisor-prompts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .prompt-btn {
+      text-align: left;
+      cursor: pointer;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--code-bg);
+      color: var(--text-secondary);
+      font-size: 0.87rem;
+      line-height: 1.45;
+      transition: all 0.18s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .prompt-btn:hover,
+    .prompt-btn.active {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--text);
+      transform: translateY(-2px);
+    }
+
+    .prompt-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .advisor-answer {
+      margin-top: 1rem;
+      padding: 1rem 1.2rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(129, 140, 248, 0.1));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .advisor-answer.visible {
+      display: flex;
+    }
+
+    .advisor-text {
+      flex: 1;
+      min-width: 240px;
+      font-size: 0.92rem;
+    }
+
+    .advisor-text strong {
+      color: var(--accent-cyan);
+    }
+
+    .advisor-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
       text-decoration: none;
+      background: var(--accent-cyan);
+      color: #080d1a;
+      font-weight: 700;
+      font-size: 0.88rem;
+      padding: 0.55rem 1rem;
+      border-radius: 9px;
+      white-space: nowrap;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    .advisor-cta:hover {
+      transform: translateY(-1px);
+      opacity: 0.92;
+    }
+
+    /* Search Dropdown Results */
+    .search-results {
+      margin-top: 0.85rem;
+      display: none;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 0.65rem;
+    }
+
+    .search-results.visible {
+      display: grid;
+    }
+
+    .search-hit {
+      text-decoration: none;
+      color: var(--text);
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 0.7rem 0.9rem;
+      border-radius: 10px;
+      font-size: 0.86rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      transition: border-color 0.15s ease;
+    }
+
+    .search-hit:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    .search-hit small {
+      color: var(--accent-cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+    }
+
+    /* ===== Knowledge Architecture Pipeline ===== */
+    .pipeline-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .pipe-step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.86rem;
+    }
+
+    .pipe-num {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 800;
+      font-size: 0.78rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      white-space: nowrap;
+    }
+
+    /* ===== Course Cards Grid ===== */
+    .course-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .course-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+      box-shadow: var(--shadow);
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .course-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .course-card.card-ieee::before {
+      background: linear-gradient(90deg, #38bdf8, #06b6d4);
+    }
+
+    .course-card.card-quant::before {
+      background: linear-gradient(90deg, #818cf8, #c084fc);
+    }
+
+    .course-card.card-aiflow::before {
+      background: linear-gradient(90deg, #34d399, #fbbf24);
+    }
+
+    .course-card:hover,
+    .course-card.highlighted {
+      transform: translateY(-5px);
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow), var(--glow-cyan);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .layer-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-cyan {
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .badge-indigo {
+      background: rgba(129, 140, 248, 0.14);
+      color: var(--accent-indigo);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+    }
+
+    .badge-emerald {
+      background: rgba(52, 211, 153, 0.14);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+
+    .dir-slug {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      background: var(--code-bg);
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .course-title {
+      font-size: 1.42rem;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    .course-title a {
       color: inherit;
-      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      text-decoration: none;
+    }
+
+    .course-title a:hover {
+      color: var(--accent-cyan);
+    }
+
+    .course-desc {
+      color: var(--text-secondary);
+      font-size: 0.94rem;
+    }
+
+    .insight-box {
+      background: var(--code-bg);
+      border-left: 3px solid var(--accent-cyan);
+      padding: 0.75rem 0.95rem;
+      border-radius: 0 10px 10px 0;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .card-quant .insight-box {
+      border-left-color: var(--accent-indigo);
+    }
+
+    .card-aiflow .insight-box {
+      border-left-color: var(--accent-emerald);
+    }
+
+    .insight-box strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 0.15rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .meta-chip {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 0.22rem 0.6rem;
+      border-radius: 6px;
+    }
+
+    .chapter-list-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: -0.4rem;
+    }
+
+    .chapter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.42rem;
+    }
+
+    .ch-pill {
+      text-decoration: none;
+      font-size: 0.79rem;
+      color: var(--text-secondary);
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 0.28rem 0.62rem;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .ch-pill:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: translateY(-1px);
+    }
+
+    .card-footer {
+      margin-top: auto;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .progress-Status {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .enter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 0.6rem 1.15rem;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+      color: #ffffff;
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .enter-btn:hover {
+      transform: translateX(3px);
+      box-shadow: var(--glow-cyan);
+    }
+
+    /* ===== Live Cross-Layer Micro-Lab ===== */
+    .micro-lab {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.85rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 2.5rem;
+    }
+
+    .micro-lab-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.35rem;
+    }
+
+    .micro-lab-header h2 {
+      font-size: 1.3rem;
+      font-weight: 800;
+    }
+
+    .micro-lab-header p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-top: 0.2rem;
+    }
+
+    .micro-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 1.15rem;
+    }
+
+    .micro-box {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.15rem;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
-    .card:hover {
-      transform: translateY(-4px);
-      border-color: var(--accent);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+
+    .micro-box-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
     }
-    .badge {
-      display: inline-block;
-      align-self: flex-start;
+
+    .bit-strip {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+    }
+
+    .bit-btn {
+      cursor: pointer;
+      width: 24px;
+      height: 30px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.8rem;
-      color: var(--accent);
-      background: rgba(56, 189, 248, 0.12);
-      padding: 0.25rem 0.6rem;
-      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      background: var(--card);
+      transition: transform 0.1s ease;
     }
-    .card h2 { font-size: 1.3rem; line-height: 1.35; }
-    .card p { color: var(--muted); font-size: 0.95rem; line-height: 1.6; flex: 1; }
-    .enter {
-      margin-top: 0.5rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--accent);
+
+    .bit-btn:hover {
+      transform: scale(1.08);
+    }
+
+    .bit-btn.sign { border-color: rgba(251, 113, 133, 0.5); color: var(--accent-rose); }
+    .bit-btn.exp  { border-color: rgba(56, 189, 248, 0.5); color: var(--accent-cyan); }
+    .bit-btn.frac { border-color: rgba(52, 211, 153, 0.5); color: var(--accent-emerald); }
+
+    .micro-readout {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      background: rgba(15, 23, 42, 0.45);
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .seg-row {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    .seg-btn {
+      cursor: pointer;
+      flex: 1;
+      padding: 0.4rem 0.55rem;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .seg-btn.active {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.14);
+    }
+
+    .bar-meter {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.18);
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald));
+      transition: width 0.25s ease;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    footer a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+
+    @media (max-width: 780px) {
+      .stats-bar {
+        grid-template-columns: repeat(2, 1fr);
+        width: 100%;
+      }
+      .pipeline-bar {
+        grid-template-columns: 1fr;
+      }
+      .course-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>📚 Interactive Technical Tutorials</h1>
-      <p class="subtitle">純前端、零相依性的互動式視覺化技術教學實驗室</p>
-    </header>
-    <main class="grid">
-      <a class="card" href="./aiflow/">
-        <span class="badge">/aiflow</span>
-        <h2>⚡ AI Flow 互動教學實驗室</h2>
-        <p>直覺拆解 LLM、Agent ReAct Loop、Skills 技能包、MCP 協定、Subagents 子代理與真實 Token 變化模擬。</p>
-        <span class="enter">進入教學 →</span>
+
+  <!-- Top Navigation -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="#top" class="brand">
+        <span class="brand-logo">🧠</span>
+        <span>Interactive Tech Academy</span>
+        <span class="brand-tag">Zero-Dependency Labs</span>
       </a>
-      <a class="card" href="./ieee754/">
-        <span class="badge">/ieee754</span>
-        <h2>🔢 IEEE 754 浮點數大冒險</h2>
-        <p>透過位元遊樂場與 BigInt 精確運算，動手掌握 binary16 / binary32 / binary64 編解碼、次正規數與捨入誤差。</p>
-        <span class="enter">進入教學 →</span>
-      </a>
-      <a class="card" href="./quant/">
-        <span class="badge">/quant</span>
-        <h2>🗜️ AI 模型壓縮技術互動教學</h2>
-        <p>在瀏覽器中親手實驗模型量化（PTQ / QAT / SmoothQuant）、結構化剪枝、知識蒸餾與 SVD 低秩分解。</p>
-        <span class="enter">進入教學 →</span>
-      </a>
-    </main>
-  </div>
+      <div class="nav-actions">
+        <a href="./ieee754/index.html" class="nav-pill">🔢 IEEE 754 浮點數</a>
+        <a href="./quant/index.html" class="nav-pill">🗜️ AI 模型壓縮</a>
+        <a href="./aiflow/index.html" class="nav-pill">⚡ AI Agent & Token 工程</a>
+        <button id="themeToggle" class="theme-btn" type="button">☀️ 淺色模式</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top" class="container">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-eyebrow">✨ 視覺化直覺 × 瀏覽器即時運算 × 從底層位元到頂層智慧代理</div>
+      <h1>
+        不死背公式，親手撥動<br />
+        <span class="grad-cyan">電腦底層位元</span> 與 <span class="grad-amber">現代 AI 系統脈絡</span>
+      </h1>
+      <p class="lead">
+        這是一座純前端、免安裝的<strong>互動式電腦科學與 AI 工程實驗室</strong>。<br />
+        我們將抽象的論文公式與系統架構，化為可即時調整、可觀察誤差與成本的動態沙盒。
+      </p>
+
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-num">3</div>
+          <div class="stat-label">核心技術領域專題</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">23</div>
+          <div class="stat-label">循序漸進互動章節</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">25+</div>
+          <div class="stat-label">瀏覽器即時模擬器</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">100%</div>
+          <div class="stat-label">純前端離線可執行</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Smart Diagnostic & Instant Chapter Search -->
+    <section class="smart-panel" aria-label="智慧學習導航">
+      <div class="smart-header">
+        <div class="smart-title">
+          <span>🧭 智慧學習診斷：點擊你想解決的疑問，或直接搜尋任一技術關鍵字</span>
+        </div>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input id="chapterSearch" type="search" placeholder="搜尋章節或概念 (例: FP16, NaN, PTQ, SVD, MCP, SKILL.md)..." autocomplete="off" />
+          <span class="search-shortcut">/</span>
+        </div>
+      </div>
+
+      <div id="searchResults" class="search-results"></div>
+
+      <div class="advisor-prompts" id="advisorPrompts">
+        <button class="prompt-btn" type="button" data-target="ieee" data-link="./ieee754/index.html#ch4" data-insight="在 IEEE 754 教學第 4 & 7 章中，你可以用 BigInt 逐步編碼器親眼看見 0.1 在二進位下是無限循環小數，並透過 ULP 階梯圖理解為什麼大數加小數會直接停滯！">
+          <span class="prompt-tag">Q1 · 數值與精確度異常</span>
+          <span>「為什麼 0.1 + 0.2 ≠ 0.3？深度學習訓練時出現的 NaN 與 Underflow 是怎麼在位元層發生的？」</span>
+        </button>
+        <button class="prompt-btn" type="button" data-target="quant" data-link="./quant/index.html#quant-adv" data-insight="在 AI 模型壓縮教學第 2、3、7 章中，你可以親手調整 Group Quantization、測試 SmoothQuant 如何撫平離群值，甚至在瀏覽器內訓練 MLP 並進行 QAT 微調！">
+          <span class="prompt-tag">Q2 · LLM 部署與顯存瓶頸</span>
+          <span>「Llama 8B 塞不進消費級顯卡，為什麼權重量化成 4-bit 甚至剪枝 50% 後模型還不會變笨？」</span>
+        </button>
+        <button class="prompt-btn" type="button" data-target="aiflow" data-link="./aiflow/index.html#token-simulator" data-insight="在 AI Flow 實驗室第 3 & 4 章中，你可以播放『Skills 漸進式載入 vs 塞爆 System Prompt』與『Subagent 隔離術』劇本，親眼看到如何省下超過 83% 的累計 Token！">
+          <span class="prompt-tag">Q3 · AI Agent 架構與 Token 成本</span>
+          <span>「我的 Agent 掛載幾個 MCP 工具後 Context 聊三句就爆掉，Skills (SKILL.md) 與 Subagent 如何解決？」</span>
+        </button>
+      </div>
+
+      <div id="advisorAnswer" class="advisor-answer">
+        <div id="advisorText" class="advisor-text"></div>
+        <a id="advisorCta" href="./ieee754/index.html" class="advisor-cta">立即前往該實驗章節 →</a>
+      </div>
+    </section>
+
+    <!-- 3-Layer Knowledge Map Banner -->
+    <div class="pipeline-bar" aria-label="三層知識體系">
+      <div class="pipe-step">
+        <span class="pipe-num">LAYER 01 · 硬體數值基石</span>
+        <span><strong>0 與 1 如何表示實數？</strong><br /><small style="color:var(--muted)">IEEE 754 · FP16 / FP32 / FP64</small></span>
+      </div>
+      <div class="pipe-step">
+        <span class="pipe-num">LAYER 02 · 模型壓縮加速</span>
+        <span><strong>如何用最少位元裝下大模型？</strong><br /><small style="color:var(--muted)">量化 · 剪枝 · 蒸餾 · SVD 低秩分解</small></span>
+      </div>
+      <div class="pipe-step">
+        <span class="pipe-num">LAYER 03 · 智慧代理系統</span>
+        <span><strong>如何調度模型與外部工具？</strong><br /><small style="color:var(--muted)">Agent Loop · Skills · MCP · Token 流</small></span>
+      </div>
+    </div>
+
+    <!-- Main 3 Tutorial Cards -->
+    <section class="course-grid" aria-label="所有互動教學列表">
+
+      <!-- Card 1: IEEE 754 -->
+      <article class="course-card card-ieee" id="card-ieee">
+        <div class="card-top">
+          <span class="layer-badge badge-cyan">LAYER 01 · 數值與位元基石</span>
+          <span class="dir-slug">./ieee754/</span>
+        </div>
+        <h2 class="course-title">
+          <a href="./ieee754/index.html">🔢 IEEE 754 浮點數大冒險</a>
+        </h2>
+        <p class="course-desc">
+          電腦只有 0 和 1，卻要裝下 <code>0.1</code>、<code>6.02×10²³</code> 甚至 <code>∞</code> 與 <code>NaN</code>。透過瀏覽器內建 <strong>BigInt 精確運算</strong>，親手撥動每一個位元，徹底搞懂半精度（binary16）、單精度（binary32）與雙精度（binary64）。
+        </p>
+        <div class="insight-box">
+          <strong>💡 核心智慧洞見</strong>
+          浮點數就是「二進位的科學記號」：指數決定動態範圍、尾數決定精確度；而「平手取偶數 (Round to Nearest, Ties to Even)」則避免了長期累加的統計偏差。
+        </div>
+        <div class="meta-row">
+          <span class="meta-chip">⏱️ 約 45–60 分鐘</span>
+          <span class="meta-chip">🎮 9 大互動章節</span>
+          <span class="meta-chip">🏆 內建隨機題庫闖關</span>
+        </div>
+        <div class="chapter-list-title">⚡ 直達章節實驗室：</div>
+        <div class="chapter-pills">
+          <a class="ch-pill" href="./ieee754/index.html#ch1">1. 浮動的小數點</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch2">2. 三精度構造對比</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch3">3. 迷你浮點數數線</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch4">4. 十進位 → IEEE 754 編碼</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch5">5. 位元解碼遊樂場 🔥</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch6">6. 特殊值動物園 (±0/NaN/∞)</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch7">7. 捨入顯微鏡與 ULP</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch8">8. 闖關挑戰</a>
+          <a class="ch-pill" href="./ieee754/index.html#ch9">9. 速查小抄與陷阱</a>
+        </div>
+        <div class="card-footer">
+          <span class="progress-Status" id="ieeeStatus">📦 純前端 BigInt 精確模擬</span>
+          <a class="enter-btn" href="./ieee754/index.html">進入 IEEE 754 實驗室 →</a>
+        </div>
+      </article>
+
+      <!-- Card 2: AI Model Compression (quant) -->
+      <article class="course-card card-quant" id="card-quant">
+        <div class="card-top">
+          <span class="layer-badge badge-indigo">LAYER 02 · 模型壓縮與推論加速</span>
+          <span class="dir-slug">./quant/</span>
+        </div>
+        <h2 class="course-title">
+          <a href="./quant/index.html">🗜️ AI 模型壓縮技術：互動式教學</a>
+        </h2>
+        <p class="course-desc">
+          大模型很強但也很「胖」。從硬體記憶體頻寬估算與 FP16/BF16/FP8/INT8 位元格式出發，一步步動手實驗<strong>量化（Quantization）、剪枝（Pruning）、知識蒸餾（Distillation）與低秩分解（Low-Rank SVD）</strong>四大核心技術。
+        </p>
+        <div class="insight-box">
+          <strong>💡 核心智慧洞見</strong>
+          LLM 推論往往受限於「記憶體頻寬」而非算力；透過 Group Quantization 處理離群值、SmoothQuant 平滑啟動值，即可用 4-bit 跑出接近 FP16 的品質。
+        </div>
+        <div class="meta-row">
+          <span class="meta-chip">⏱️ 約 60–90 分鐘</span>
+          <span class="meta-chip">🧪 9 章節 · 12 個互動實驗</span>
+          <span class="meta-chip">🧠 瀏覽器即時訓練 MLP</span>
+        </div>
+        <div class="chapter-list-title">⚡ 直達章節實驗室：</div>
+        <div class="chapter-pills">
+          <a class="ch-pill" href="./quant/index.html#intro">0. 硬體顯存與速度估算器</a>
+          <a class="ch-pill" href="./quant/index.html#formats">1. FP16/BF16/FP8/INT8 檢視器</a>
+          <a class="ch-pill" href="./quant/index.html#quant">2. 量化基礎與離群值實驗</a>
+          <a class="ch-pill" href="./quant/index.html#quant-adv">3. PTQ、QAT 與 SmoothQuant 🔥</a>
+          <a class="ch-pill" href="./quant/index.html#prune">4. 結構化与 2:4 稀疏剪枝</a>
+          <a class="ch-pill" href="./quant/index.html#distill">5. 知識蒸餾與溫度 Softmax</a>
+          <a class="ch-pill" href="./quant/index.html#lowrank">6. 圖片 Jacobi SVD 低秩分解</a>
+          <a class="ch-pill" href="./quant/index.html#lab">7. 綜合實驗室 (MLP 壓縮微調) 🔥</a>
+          <a class="ch-pill" href="./quant/index.html#summary">8. 技術選型指南與總測驗</a>
+        </div>
+        <div class="card-footer">
+          <span class="progress-Status" id="quantStatus">📊 支援測驗進度自動保存</span>
+          <a class="enter-btn" href="./quant/index.html">進入模型壓縮實驗室 →</a>
+        </div>
+      </article>
+
+      <!-- Card 3: AI Flow (Agent, Skills, MCP, Tokens) -->
+      <article class="course-card card-aiflow" id="card-aiflow">
+        <div class="card-top">
+          <span class="layer-badge badge-emerald">LAYER 03 · 代理架構與 Context 工程</span>
+          <span class="dir-slug">./aiflow/</span>
+        </div>
+        <h2 class="course-title">
+          <a href="./aiflow/index.html">⚡ AI Flow 互動教學實驗室</a>
+        </h2>
+        <p class="course-desc">
+          為什麼別人的 Agent 既聰明又省錢，你的 Context Window 卻聊三句就爆掉？直覺拆解 <strong>LLM、Agent ReAct 迴圈、Skills (`SKILL.md`) 技能包、MCP 協定與 Subagents 子代理</strong>，並逐輪視覺化背後的 Token 流動與成本變化。
+        </p>
+        <div class="insight-box">
+          <strong>💡 核心智慧洞見</strong>
+          不要把所有 SOP 都塞進 System Prompt！改用 Skills 漸進式按需載入（平時只放目錄索引）並將高噪聲搜尋委派給 Subagent 獨立 Context，可省下 80%+ Token。
+        </div>
+        <div class="meta-row">
+          <span class="meta-chip">⏱️ 約 30–45 分鐘</span>
+          <span class="meta-chip">🎬 3 大真實劇本逐步模擬</span>
+          <span class="meta-chip">🧮 架構健康度沙盒計算機</span>
+        </div>
+        <div class="chapter-list-title">⚡ 直達章節實驗室：</div>
+        <div class="chapter-pills">
+          <a class="ch-pill" href="./aiflow/index.html#concepts">1. 米其林智慧廚房白話比喻</a>
+          <a class="ch-pill" href="./aiflow/index.html#architecture">2. 互動式架構拆解圖</a>
+          <a class="ch-pill" href="./aiflow/index.html#token-simulator">3. Context Token 變化模擬器 🔥</a>
+          <a class="ch-pill" href="./aiflow/index.html#sandbox">4. Agent 組裝沙盒與健康度評分 🔥</a>
+          <a class="ch-pill" href="./aiflow/index.html#comparison">5. 實戰速查對照表 & 闖關測驗</a>
+        </div>
+        <div class="card-footer">
+          <span class="progress-Status">🔥 含反面教材對比模式</span>
+          <a class="enter-btn" href="./aiflow/index.html">進入 AI Flow 實驗室 →</a>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- 30-Second Cross-Layer Interactive Teaser -->
+    <section class="micro-lab" aria-label="跨層級 30 秒互動微實驗">
+      <div class="micro-lab-header">
+        <div>
+          <h2>⚡ 30 秒跨層級連動預覽：從 1 個位元 → 模型顯存 → Agent Token 成本</h2>
+          <p>在進入各專題前，直接在下方撥動按鈕，體驗三個教學主題如何環環相扣影響最終 AI 系統表現：</p>
+        </div>
+      </div>
+
+      <div class="micro-grid">
+        <!-- Micro 1: IEEE 754 FP16 Bit Flipper -->
+        <div class="micro-box">
+          <div class="micro-box-head">
+            <span>① [IEEE 754] 點擊位元翻轉 FP16 權重</span>
+            <a href="./ieee754/index.html#ch5" style="color:var(--accent-cyan);text-decoration:none;font-size:0.78rem;">完整版 →</a>
+          </div>
+          <div class="bit-strip" id="fp16Bits" title="點擊任一位元 (紅:正負號, 藍:指數, 綠:尾數)"></div>
+          <div class="micro-readout" id="fp16Readout"></div>
+        </div>
+
+        <!-- Micro 2: Quantization VRAM Calculator -->
+        <div class="micro-box">
+          <div class="micro-box-head">
+            <span>② [Quant] 切換 8B 模型權重精度</span>
+            <a href="./quant/index.html#intro" style="color:var(--accent-indigo);text-decoration:none;font-size:0.78rem;">完整版 →</a>
+          </div>
+          <div class="seg-row" id="quantPrecisionRow">
+            <button type="button" class="seg-btn" data-bits="32">FP32 (32b)</button>
+            <button type="button" class="seg-btn active" data-bits="16">FP16 (16b)</button>
+            <button type="button" class="seg-btn" data-bits="8">INT8 (8b)</button>
+            <button type="button" class="seg-btn" data-bits="4">INT4 (4b)</button>
+          </div>
+          <div class="bar-meter"><div class="bar-fill" id="vramBar" style="width: 50%"></div></div>
+          <div class="micro-readout" id="vramReadout"></div>
+        </div>
+
+        <!-- Micro 3: AI Flow Context Window Strategy -->
+        <div class="micro-box">
+          <div class="micro-box-head">
+            <span>③ [AI Flow] 15 套團隊知識庫載入策略</span>
+            <a href="./aiflow/index.html#token-simulator" style="color:var(--accent-emerald);text-decoration:none;font-size:0.78rem;">完整版 →</a>
+          </div>
+          <div class="seg-row" id="agentStrategyRow">
+            <button type="button" class="seg-btn active" data-mode="skills">✅ Skills 按需載入</button>
+            <button type="button" class="seg-btn" data-mode="bloat">❌ 全塞 System Prompt</button>
+          </div>
+          <div class="bar-meter"><div class="bar-fill" id="tokenBar" style="width: 16%"></div></div>
+          <div class="micro-readout" id="tokenReadout"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>
+        Built with pure HTML5, CSS3 & Vanilla JavaScript ·
+        <a href="https://github.com/lyanchih/tutorials" target="_blank" rel="noopener">GitHub Repository (lyanchih/tutorials)</a>
+      </p>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      // ===== 1. Theme Toggle =====
+      const htmlEl = document.documentElement;
+      const themeBtn = document.getElementById('themeToggle');
+      const savedTheme = localStorage.getItem('tutorials-hub-theme') || 'dark';
+      htmlEl.setAttribute('data-theme', savedTheme);
+      updateThemeBtn(savedTheme);
+
+      themeBtn.addEventListener('click', () => {
+        const next = htmlEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        htmlEl.setAttribute('data-theme', next);
+        localStorage.setItem('tutorials-hub-theme', next);
+        updateThemeBtn(next);
+      });
+
+      function updateThemeBtn(theme) {
+        themeBtn.textContent = theme === 'dark' ? '☀️ 淺色模式' : '🌙 深色模式';
+      }
+
+      // ===== 2. Read Existing Learning Progress from localStorage =====
+      try {
+        const ieeeScore = localStorage.getItem('ieee754-score');
+        if (ieeeScore) {
+          const parsed = JSON.parse(ieeeScore);
+          if (parsed && parsed.pts > 0) {
+            document.getElementById('ieeeStatus').textContent = `🏆 已獲 ${parsed.pts} 分 (${parsed.ok}/${parsed.n} 題正確)`;
+          }
+        }
+        const quantProg = localStorage.getItem('ai-compress-quiz-v1');
+        if (quantProg) {
+          const parsed = JSON.parse(quantProg);
+          const doneCount = Object.keys(parsed || {}).length;
+          if (doneCount > 0) {
+            document.getElementById('quantStatus').textContent = `✅ 已完成 ${doneCount} / 9 章測驗`;
+          }
+        }
+      } catch (e) {}
+
+      // ===== 3. Smart Advisor Prompts =====
+      const promptBtns = document.querySelectorAll('.prompt-btn');
+      const advisorAnswer = document.getElementById('advisorAnswer');
+      const advisorText = document.getElementById('advisorText');
+      const advisorCta = document.getElementById('advisorCta');
+      const cards = {
+        ieee: document.getElementById('card-ieee'),
+        quant: document.getElementById('card-quant'),
+        aiflow: document.getElementById('card-aiflow')
+      };
+
+      promptBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          promptBtns.forEach(b => b.classList.remove('active'));
+          Object.values(cards).forEach(c => c.classList.remove('highlighted'));
+
+          btn.classList.add('active');
+          const target = btn.getAttribute('data-target');
+          const link = btn.getAttribute('data-link');
+          const insight = btn.getAttribute('data-insight');
+
+          if (cards[target]) cards[target].classList.add('highlighted');
+          advisorText.innerHTML = `<strong>💡 智慧診斷建議：</strong>${insight}`;
+          advisorCta.setAttribute('href', link);
+          advisorAnswer.classList.add('visible');
+        });
+      });
+
+      // ===== 4. Instant Chapter Search =====
+      const searchIndex = [
+        { course: 'IEEE 754 浮點數', title: '第 1 章：為什麼需要浮點數與科學記號', keywords: '定點數 浮點數 科學記號 小數點', url: './ieee754/index.html#ch1' },
+        { course: 'IEEE 754 浮點數', title: '第 2 章：三兄弟構造 (FP16 / FP32 / FP64) 與指數偏差 Bias', keywords: 'binary16 binary32 binary64 half single double bias 指數 尾數', url: './ieee754/index.html#ch2' },
+        { course: 'IEEE 754 浮點數', title: '第 3 章：迷你浮點數玩具與數線分布', keywords: '數線 密度 間距 迷你浮點數', url: './ieee754/index.html#ch3' },
+        { course: 'IEEE 754 浮點數', title: '第 4 章：十進位轉 IEEE 754 逐步編碼器', keywords: '編碼 0.1 循環小數 正規化', url: './ieee754/index.html#ch4' },
+        { course: 'IEEE 754 浮點數', title: '第 5 章：位元解碼遊樂場 (點擊翻轉位元)', keywords: '解碼 hex 十六進位 位元翻轉', url: './ieee754/index.html#ch5' },
+        { course: 'IEEE 754 浮點數', title: '第 6 章：特殊值動物園 (±0、次正規數、∞、NaN)', keywords: 'subnormal denormal NaN Infinity 溢位 下溢', url: './ieee754/index.html#ch6' },
+        { course: 'IEEE 754 浮點數', title: '第 7 章：精度、平手取偶數捨入與 ULP 階梯', keywords: 'rounding 捨入 ULP 0.1+0.2 吃大數', url: './ieee754/index.html#ch7' },
+        { course: 'IEEE 754 浮點數', title: '第 8 & 9 章：隨機闖關挑戰與常見陷阱速查', keywords: '測驗 小抄 陷阱 型別對照', url: './ieee754/index.html#ch8' },
+        { course: 'AI 模型壓縮', title: '第 0 章：為什麼要壓縮模型 (記憶體與推論速度估算器)', keywords: 'VRAM 顯存 記憶體頻寬 Llama 4090', url: './quant/index.html#intro' },
+        { course: 'AI 模型壓縮', title: '第 1 章：FP32 / FP16 / BF16 / FP8 / INT8 位元檢視器', keywords: 'BF16 bfloat16 FP8 E4M3 E5M2 INT8', url: './quant/index.html#formats' },
+        { course: 'AI 模型壓縮', title: '第 2 章：量化基礎、對稱/非對稱、Group 粒度與離群值', keywords: 'quantization 對稱 非對稱 zero-point scale outlier 離群值 clipping', url: './quant/index.html#quant' },
+        { course: 'AI 模型壓縮', title: '第 3 章：進階量化 PTQ、QAT、GPTQ、AWQ 與 SmoothQuant', keywords: 'PTQ QAT SmoothQuant GPTQ AWQ GGUF LLM', url: './quant/index.html#quant-adv' },
+        { course: 'AI 模型壓縮', title: '第 4 章：非結構化、結構化與 NVIDIA 2:4 稀疏剪枝', keywords: 'pruning 剪枝 稀疏 sparsity 2:4', url: './quant/index.html#prune' },
+        { course: 'AI 模型壓縮', title: '第 5 章：知識蒸餾 (Knowledge Distillation) 與溫度 Softmax', keywords: 'distillation 知識蒸餾 teacher student KL divergence 溫度', url: './quant/index.html#distill' },
+        { course: 'AI 模型壓縮', title: '第 6 章：低秩分解 (SVD 圖片壓縮與 LoRA 原理)', keywords: 'SVD 低秩分解 low-rank LoRA 矩陣分解', url: './quant/index.html#lowrank' },
+        { course: 'AI 模型壓縮', title: '第 7 章：綜合實驗室 (瀏覽器訓練 MLP 並進行剪枝與 QAT)', keywords: 'MLP 訓練 STE 微調 綜合實驗室', url: './quant/index.html#lab' },
+        { course: 'AI Flow 實驗室', title: '模組 1：米其林智慧廚房白話比喻 (LLM / Agent / Skills / MCP / Subagent)', keywords: '比喻 角色 LLM Agent Skills MCP Subagent', url: './aiflow/index.html#concepts' },
+        { course: 'AI Flow 實驗室', title: '模組 2：互動式架構拆解圖与真實設定檔範例', keywords: '架構圖 SKILL.md mcp_config.json GEMINI.md', url: './aiflow/index.html#architecture' },
+        { course: 'AI Flow 實驗室', title: '模組 3：Context Window Token 變化模擬器 (3 大真實劇本)', keywords: 'Token 模擬器 Context Window Thinking 漸進式載入 瘦身', url: './aiflow/index.html#token-simulator' },
+        { course: 'AI Flow 實驗室', title: '模組 4：動手組裝 AI Agent 沙盒與架構健康度評分', keywords: '沙盒 計算機 健康度 成本估算', url: './aiflow/index.html#sandbox' },
+        { course: 'AI Flow 實驗室', title: '模組 5：實戰選型速查表與 5 題情境闖關測驗', keywords: '對照表 速查表 測驗', url: './aiflow/index.html#comparison' }
+      ];
+
+      const searchInput = document.getElementById('chapterSearch');
+      const searchResults = document.getElementById('searchResults');
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement !== searchInput) {
+          e.preventDefault();
+          searchInput.focus();
+        }
+      });
+
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+          searchResults.classList.remove('visible');
+          searchResults.innerHTML = '';
+          return;
+        }
+        const matched = searchIndex.filter(item =>
+          item.title.toLowerCase().includes(q) ||
+          item.keywords.toLowerCase().includes(q) ||
+          item.course.toLowerCase().includes(q)
+        );
+        if (matched.length === 0) {
+          searchResults.innerHTML = `<div class="search-hit"><small>無相符結果</small><span>試試搜尋：FP16、NaN、SmoothQuant、SVD、MCP、SKILL.md、Token</span></div>`;
+        } else {
+          searchResults.innerHTML = matched.map(m => `
+            <a class="search-hit" href="${m.url}">
+              <small>${m.course}</small>
+              <span>${m.title}</span>
+            </a>
+          `).join('');
+        }
+        searchResults.classList.add('visible');
+      });
+
+      // ===== 5. Micro-Lab 1: Live FP16 Bit Flipper =====
+      // Default: 0 01111 0100000000 = +1.25
+      const bits = [0, 0,1,1,1,1, 0,1,0,0,0,0,0,0,0,0];
+      const fp16BitsEl = document.getElementById('fp16Bits');
+      const fp16Readout = document.getElementById('fp16Readout');
+
+      function renderFp16() {
+        fp16BitsEl.innerHTML = '';
+        bits.forEach((b, idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'bit-btn ' + (idx === 0 ? 'sign' : idx <= 5 ? 'exp' : 'frac');
+          btn.textContent = b;
+          btn.addEventListener('click', () => {
+            bits[idx] = bits[idx] ? 0 : 1;
+            renderFp16();
+          });
+          fp16BitsEl.appendChild(btn);
+        });
+
+        const sign = bits[0] ? -1 : 1;
+        let exp = 0;
+        for (let i = 1; i <= 5; i++) exp = (exp << 1) | bits[i];
+        let frac = 0;
+        for (let i = 6; i < 16; i++) frac += bits[i] * Math.pow(2, -(i - 5));
+
+        let valText = '';
+        if (exp === 31) {
+          valText = frac === 0 ? (sign > 0 ? '+∞ (無窮大)' : '-∞ (負無窮大)') : 'NaN (非數值)';
+        } else if (exp === 0) {
+          const v = sign * Math.pow(2, -14) * frac;
+          valText = `${v.toPrecision(5)} (次正規數/零)`;
+        } else {
+          const v = sign * Math.pow(2, exp - 15) * (1 + frac);
+          valText = `${sign < 0 ? '-' : '+'}1.${bits.slice(6, 10).join('')}…₂ × 2^(${exp - 15}) = ${Number(v.toPrecision(6))}`;
+        }
+        fp16Readout.textContent = `數值解碼：${valText}`;
+      }
+      renderFp16();
+
+      // ===== 6. Micro-Lab 2: 8B LLM Quantization VRAM =====
+      const quantBtns = document.querySelectorAll('#quantPrecisionRow .seg-btn');
+      const vramBar = document.getElementById('vramBar');
+      const vramReadout = document.getElementById('vramReadout');
+
+      function updateQuant(b) {
+        const gb = (8 * b) / 8; // 8B params * (b / 8) bytes
+        const pct = (b / 32) * 100;
+        vramBar.style.width = `${pct}%`;
+        const fit = gb <= 6 ? '✅ 筆電/手機 NPU 輕鬆跑' : gb <= 16 ? '⚠️ 需 24GB 顯卡 (RTX 4090)' : '❌ 單張消費級顯卡塞不下';
+        vramReadout.textContent = `Llama-8B 權重約需 ${gb.toFixed(1)} GB 顯存 · ${fit}`;
+      }
+      quantBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          quantBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updateQuant(Number(btn.getAttribute('data-bits')));
+        });
+      });
+      updateQuant(16);
+
+      // ===== 7. Micro-Lab 3: Agent Skills vs Prompt Bloat =====
+      const stratBtns = document.querySelectorAll('#agentStrategyRow .seg-btn');
+      const tokenBar = document.getElementById('tokenBar');
+      const tokenReadout = document.getElementById('tokenReadout');
+
+      function updateStrategy(mode) {
+        if (mode === 'skills') {
+          tokenBar.style.width = '16%';
+          tokenReadout.textContent = '5 輪累計：約 14,200 tokens (僅載入目錄索引 + 1 個按需 SKILL.md，省下 83%！)';
+        } else {
+          tokenBar.style.width = '96%';
+          tokenReadout.textContent = '5 輪累計：約 86,500 tokens (每輪重送 15 套完整規範，Context 迅速塞爆！)';
+        }
+      }
+      stratBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          stratBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updateStrategy(btn.getAttribute('data-mode'));
+        });
+      });
+      updateStrategy('skills');
+    })();
+  </script>
 </body>
 </html>
