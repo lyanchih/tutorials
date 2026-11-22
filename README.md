@@ -11,6 +11,7 @@
 | [`aiflow/`](./aiflow/) | [線上體驗](https://lyanchih.github.io/tutorials/aiflow/) | **⚡ AI Flow 互動教學實驗室** | Agent ReAct Loop、Skills (`SKILL.md`) 漸進式載入、MCP 協定、Subagents 子代理與 Context Window Token 變化全圖解 |
 | [`ieee754/`](./ieee754/) | [線上體驗](https://lyanchih.github.io/tutorials/ieee754/) | **🔢 IEEE 754 浮點數大冒險** | 以互動遊戲與 BigInt 精確運算學會 binary16（半精度）、binary32（單精度）、binary64（雙精度）的編碼、捨入與特殊值 |
 | [`quant/`](./quant/) | [線上體驗](https://lyanchih.github.io/tutorials/quant/) | **🗜️ AI 模型壓縮技術互動教學** | 動手實驗模型量化（FP16/BF16/FP8/INT8/PTQ/QAT/SmoothQuant）、剪枝（2:4 稀疏）、知識蒸餾與低秩分解（SVD） |
+| [`p2p/`](./p2p/) | [線上體驗](https://lyanchih.github.io/tutorials/p2p/) | **🔗 P2P 點對點網路：從 BitTorrent 到 WebRTC** | NAT 打洞、STUN/TURN/ICE、ShareDrop / PairDrop 的信令與裝置發現、真實 WebRTC 傳檔，以及 .torrent / infohash、Peer Wire、Swarm 演算法、Kademlia DHT，以及 DID 去中心化身分 |
 
 ---
 
@@ -27,3 +28,4 @@ python3 -m http.server 8000
 - `aiflow/index.html`
 - `ieee754/index.html`
 - `quant/index.html`
+- `p2p/index.html`

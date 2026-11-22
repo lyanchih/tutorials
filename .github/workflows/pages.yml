@@ -26,7 +26,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp -r index.html .nojekyll aiflow ieee754 quant _site/
+          cp -r index.html .nojekyll aiflow ieee754 quant p2p _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

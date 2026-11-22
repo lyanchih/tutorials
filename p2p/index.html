@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P2P 點對點網路：從 BitTorrent 到 WebRTC 的互動式教學</title>
+  <meta name="description" content="用互動實驗理解 NAT 穿透、STUN/TURN/ICE、WebRTC 信令、ShareDrop / PairDrop 的裝置發現，以及 BitTorrent 的 .torrent、Peer Wire、Swarm 與 Kademlia DHT。">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- ===== 側邊導覽 ===== -->
+  <aside class="sidebar">
+    <div class="brand">🔗 P2P 點對點網路<small>從 BitTorrent 到 WebRTC</small></div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>測驗完成進度</span><span id="progressText">0 / 13</span></div>
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+    <ul class="nav">
+      <li><a href="#intro">為什麼要 P2P</a></li>
+      <li><a href="#history">P2P 演進史與搜尋</a></li>
+      <li><a href="#nat">NAT：連線的頭號敵人</a></li>
+      <li><a href="#ice">STUN / TURN / ICE</a></li>
+      <li><a href="#signal">信令與裝置發現</a></li>
+      <li><a href="#webrtc">WebRTC DataChannel 傳檔</a></li>
+      <li><a href="#lab">實戰：自己做 PairDrop</a></li>
+      <li><a href="#torrent">BitTorrent ①：.torrent 與 infohash</a></li>
+      <li><a href="#wire">BitTorrent ②：Tracker 與 Peer Wire</a></li>
+      <li><a href="#swarm">BitTorrent ③：Swarm 模擬器</a></li>
+      <li><a href="#dht">BitTorrent ④：DHT / Kademlia</a></li>
+      <li><a href="#did">身分：DID 去中心化識別碼</a></li>
+      <li><a href="#summary">總結：兩個世界的交會</a></li>
+    </ul>
+    <div class="sidebar-foot">
+      <button class="btn small" id="themeToggle">🌙 暗色</button>
+      <button class="btn small" id="resetProgress">清除進度</button>
+    </div>
+  </aside>
+  <button class="menu-btn" aria-label="開啟目錄">☰</button>
+
+  <main>
+  <div class="content">
+
+    <header class="hero">
+      <h1>P2P 點對點網路：從 BitTorrent 到 WebRTC</h1>
+      <p>ShareDrop、PairDrop 讓你在瀏覽器裡「隔空投送」檔案；BitTorrent 二十多年前就讓上百萬台電腦一起分享同一個檔案。
+        它們看起來很不一樣，其實都在回答同樣的四個問題：<b>怎麼找到彼此？怎麼連上？怎麼傳？怎麼信任？</b></p>
+      <p>這份教學從 NAT 穿透的封包層級開始，一路做到在兩個分頁之間真的用 WebRTC 傳檔、在瀏覽器裡產生真的 .torrent 檔、模擬整個 BitTorrent swarm 與 Kademlia DHT。</p>
+      <div class="meta">
+        <span class="chip">⏱️ 約 90–120 分鐘</span>
+        <span class="chip">📚 先備知識：IP / Port / TCP / UDP 基本概念</span>
+        <span class="chip">🧪 21 個互動實驗（含真實 WebRTC 連線與 Ed25519 簽章）</span>
+        <span class="chip">✅ 每章附小測驗</span>
+      </div>
+    </header>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="intro">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 0</span></div>
+      <h2>為什麼要 P2P？</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        在 Client–Server 架構裡，<b>伺服器的上傳頻寬</b>是所有人共用的瓶頸；P2P 讓每個下載者同時也是上傳者，
+        <b>使用者越多、總上傳能力就越大</b>——系統會「自我擴展」。
+      </div>
+
+      <p>想像你要把一個 1 GB 的檔案發給 1000 個人。傳統做法是放在伺服器上讓大家下載，伺服器得送出 1000 GB。
+        但如果先拿到一部分的人<b>互相轉傳</b>，伺服器只要送出「大約一份」就夠了，剩下的頻寬由使用者們貢獻。這就是 P2P（Peer-to-Peer）的核心：
+        每個節點（peer）<b>既是客戶端，也是伺服器</b>。</p>
+
+      <p>網路教科書（Kurose &amp; Ross）給出了兩種架構「把檔案發給 N 個人」所需最短時間的下界：</p>
+      <div class="formula">
+        <b>Client–Server：</b> <var>D</var><sub>cs</sub> ≥ max(
+        <span class="frac"><span><var>N</var>·<var>F</var></span><span><var>u</var><sub>s</sub></span></span>,
+        <span class="frac"><span><var>F</var></span><span><var>d</var><sub>min</sub></span></span> )
+        <br>
+        <b>P2P：</b> <var>D</var><sub>p2p</sub> ≥ max(
+        <span class="frac"><span><var>F</var></span><span><var>u</var><sub>s</sub></span></span>,
+        <span class="frac"><span><var>F</var></span><span><var>d</var><sub>min</sub></span></span>,
+        <span class="frac"><span><var>N</var>·<var>F</var></span><span><var>u</var><sub>s</sub> + <span class="hl">Σ<var>u</var><sub>i</sub></span></span></span> )
+        <span class="note"><var>F</var>：檔案大小；<var>u</var><sub>s</sub>：伺服器（或第一個種子）上傳頻寬；<var>u</var><sub>i</sub>：第 i 個 peer 的上傳頻寬；<var>d</var><sub>min</sub>：最慢的下載頻寬。
+          關鍵在 P2P 公式的分母：總上傳能力會隨 N 一起成長，所以時間幾乎不隨人數線性增加。</span>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 0：伺服器 vs P2P，誰先把檔案發完？</div>
+        <div class="controls">
+          <div class="control"><label for="distN">下載人數 N <output for="distN"></output></label><input type="range" id="distN" min="0" max="4" step="0.01" value="2"></div>
+          <div class="control"><label for="distF">檔案大小 F <output for="distF"></output></label><input type="range" id="distF" min="10" max="8000" step="10" value="1000"></div>
+          <div class="control"><label for="distUs"><span>伺服器上傳 u<sub>s</sub></span> <output for="distUs"></output></label><input type="range" id="distUs" min="10" max="10000" step="10" value="1000"></div>
+          <div class="control"><label for="distU">每個 peer 上傳 u <output for="distU"></output></label><input type="range" id="distU" min="0" max="200" step="1" value="20"></div>
+          <div class="control"><label for="distD">每個 peer 下載 d <output for="distD"></output></label><input type="range" id="distD" min="10" max="1000" step="10" value="100"></div>
+        </div>
+        <div class="metrics" id="distMetrics"></div>
+        <div class="canvas-box"><canvas id="distCanvas" style="height:260px"></canvas></div>
+        <div class="legend"><span style="--sw:var(--bad)">Client–Server</span><span style="--sw:var(--good)">P2P</span><span style="--sw:var(--muted)">目前 N</span></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>把 N 拉到 10,000：Client–Server 的時間線性爆炸，P2P 卻趨近一條水平線（上限為 F·N/(N·u) = F/u）。</li>
+            <li>把「每個 peer 上傳 u」拉到 0：P2P 退化成 Client–Server。<b>P2P 的威力完全來自使用者願意上傳</b>——這就是第 9 章 BitTorrent 要用 tit-for-tat 對付「搭便車」的原因。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>每個 P2P 系統都要回答的四個問題</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>問題</th><th>ShareDrop / PairDrop（瀏覽器）</th><th>BitTorrent（桌面程式）</th><th>本教學章節</th></tr>
+          <tr><td>🔍 <b>發現</b>：誰在附近？誰有我要的檔案？</td><td>Firebase / WebSocket 伺服器依「公網 IP」或配對碼分房間</td><td>Tracker 伺服器、DHT、PEX</td><td>第 1、4、8、10 章</td></tr>
+          <tr><td>🔌 <b>連線</b>：雙方都在 NAT 後面怎麼連？</td><td>ICE = STUN 打洞 + TURN 中繼</td><td>部分 peer 有公網 port（UPnP / NAT-PMP），uTP 打洞</td><td>第 2、3 章</td></tr>
+          <tr><td>📦 <b>傳輸</b>：怎麼可靠又有效率地傳？</td><td>WebRTC DataChannel（SCTP over DTLS over UDP）</td><td>TCP 或 uTP 上的 Peer Wire Protocol，切成 piece / block</td><td>第 5、6、8 章</td></tr>
+          <tr><td>🛡️ <b>信任</b>：資料是對的嗎？有人白吃白喝？</td><td>DTLS 強制加密；信令伺服器要可信（或用 DID 簽章擺脫這個前提）</td><td>每個 piece 的 SHA-1 雜湊；tit-for-tat 防搭便車</td><td>第 7、9、11 章</td></tr>
+        </table>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 為什麼 P2P 分發時間幾乎不會隨下載人數 N 線性成長？</p>
+          <ol class="opts"><li>P2P 的封包比較小</li><li>P2P 不需要下載完整檔案</li><li>每多一個下載者，總上傳能力也多一份</li><li>P2P 會自動壓縮檔案</li></ol>
+          <div class="explain">分母是 u<sub>s</sub> + Σu<sub>i</sub>，下載者本身就是上傳者，需求與供給一起成長。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. ShareDrop 使用 Firebase、PairDrop 使用 WebSocket 伺服器，它們主要解決的是四個問題中的哪一個？</p>
+          <ol class="opts"><li>傳輸檔案內容</li><li>發現彼此並交換連線資訊（信令）</li><li>檔案完整性驗證</li><li>壓縮</li></ol>
+          <div class="explain">伺服器只負責「誰在線上」與轉送 SDP / ICE 候選；連上之後檔案內容走 WebRTC 直連，不經過伺服器（除非退回 TURN 或 WebSocket 備援）。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="history">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 1</span></div>
+      <h2>P2P 演進史：搜尋這件事有多難</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        P2P 的歷史就是「怎麼找到資源」的演進：<b>中央索引</b>（Napster）→ <b>洪泛</b>（Gnutella）→ <b>超級節點</b>（Kazaa）→
+        <b>不搜尋，只靠 .torrent + Tracker</b>（BitTorrent）→ <b>結構化 DHT</b>（Kademlia）→ <b>瀏覽器裡的 P2P</b>（WebRTC）。
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <tr><th>年代</th><th>系統</th><th>怎麼找到資源</th><th>優點</th><th>致命傷</th></tr>
+          <tr><td>1999</td><td>Napster</td><td>所有人把檔案清單上傳到<b>中央索引伺服器</b>，搜尋問伺服器，下載才 P2P</td><td>搜尋又快又準</td><td>單點故障；伺服器被告就整個關站（2001）</td></tr>
+          <tr><td>2000</td><td>Gnutella</td><td>完全去中心：查詢以<b>洪泛（flooding）</b>傳給所有鄰居，帶 TTL 遞減（常見 7）</td><td>沒有中央可以關</td><td>訊息量隨網路爆炸；TTL 之外的檔案找不到</td></tr>
+          <tr><td>2001</td><td>FastTrack / Kazaa</td><td>分層：頻寬好的電腦升級為<b>超級節點</b>，替一般節點建索引</td><td>兼顧效率與去中心</td><td>超級節點負擔重；協定封閉</td></tr>
+          <tr><td>2001</td><td>BitTorrent</td><td><b>根本不做搜尋</b>：用 .torrent 檔描述內容，Tracker 只回答「誰也在下載這個 infohash」</td><td>專注「怎麼快速分發同一個檔案」</td><td>Tracker 仍是中心點 → 後來用 DHT 補上</td></tr>
+          <tr><td>2005</td><td>Mainline DHT</td><td><b>Kademlia</b>：以 XOR 距離組織節點，O(log N) 步找到負責某個 infohash 的節點</td><td>無 Tracker 也能找到 peer；磁力連結</td><td>Sybil / Eclipse 攻擊、NAT 後節點難以參與</td></tr>
+          <tr><td>2011–</td><td>WebRTC</td><td>標準<b>刻意不規定</b>怎麼發現與信令，交給應用自己（WebSocket、Firebase…）</td><td>瀏覽器原生、強制加密、內建 NAT 穿透</td><td>仍需要信令伺服器；對稱型 NAT 要 TURN</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 1：三種搜尋方式要送多少訊息？</div>
+        <p class="small-note">下方是一個 80 節點的隨機網路，每個節點只和附近幾個節點相連（就像 Gnutella 的鄰居關係）。
+          ★ 是發起搜尋的節點，◆ 是擁有檔案的節點。比較三種搜尋策略的訊息數與成功率。</p>
+        <div class="controls">
+          <div class="control"><span class="label">搜尋方式</span>
+            <div class="seg" id="searchMode">
+              <button data-value="central" class="active">中央索引（Napster）</button>
+              <button data-value="flood">洪泛（Gnutella）</button>
+              <button data-value="dht">DHT（Kademlia）</button>
+            </div>
+          </div>
+          <div class="control"><label for="searchTTL">TTL（洪泛跳數上限）<output for="searchTTL"></output></label><input type="range" id="searchTTL" min="1" max="10" step="1" value="4"></div>
+          <div class="control"><label for="searchReplicas">檔案副本數 <output for="searchReplicas"></output></label><input type="range" id="searchReplicas" min="1" max="6" step="1" value="1"></div>
+        </div>
+        <div class="btn-row"><button class="btn primary" id="searchGo">▶ 開始搜尋</button><button class="btn" id="searchNew">🎲 換一個網路</button></div>
+        <div class="metrics" id="searchMetrics"></div>
+        <div class="canvas-box"><canvas id="searchCanvas" style="height:380px"></canvas></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>洪泛模式：TTL 每 +1，訊息數大約成倍增加；TTL 太小則找不到遠處的檔案。這就是 Gnutella 撐不住大規模的原因。</li>
+            <li>DHT 模式：節點 ID 決定「誰負責什麼」，每一步至少把 XOR 距離砍半，所以只要約 log₂N 步，<b>而且跟檔案在哪裡無關</b>——DHT 是一層「覆蓋網路」，查詢可以直接送給任何已知節點，不受實體鄰居限制。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="3">
+          <p>1. Napster 被關站的技術原因是？</p>
+          <ol class="opts"><li>傳輸太慢</li><li>洪泛訊息太多</li><li>沒有檔案完整性檢查</li><li>依賴中央索引伺服器，關掉它整個網路就停擺</li></ol>
+          <div class="explain">Napster 的檔案傳輸是 P2P 的，但搜尋完全依賴中央伺服器，所以法院只要命令關閉伺服器即可。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. BitTorrent 與 Napster / Gnutella 最大的設計差異是？</p>
+          <ol class="opts"><li>BitTorrent 不負責搜尋，只專注於讓同一份內容的下載者互相交換資料</li><li>BitTorrent 不需要任何伺服器</li><li>BitTorrent 使用洪泛查詢</li><li>BitTorrent 只能傳小檔案</li></ol>
+          <div class="explain">搜尋交給網站（.torrent 索引站），BitTorrent 協定本身只管「同一個 infohash 的 swarm 怎麼最快分發」。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="nat">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 2</span></div>
+      <h2>NAT：P2P 連線的頭號敵人</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        家用路由器的 NAT 會把很多台電腦藏在同一個公網 IP 後面，而且<b>預設丟掉所有「不是你先送出去」的封包</b>。
+        「打洞（hole punching）」的技巧是：雙方<b>同時</b>往對方的公網位址送封包，讓各自的 NAT 誤以為對方的封包是「回應」。能不能成功，取決於 NAT 的<b>映射行為</b>與<b>過濾行為</b>。
+      </div>
+
+      <h3>NAT 在做什麼</h3>
+      <p>IPv4 只有約 43 億個位址，早就不夠用。於是家裡的裝置拿的是<b>私有位址</b>（<code>192.168.0.0/16</code>、<code>10.0.0.0/8</code>、<code>172.16.0.0/12</code>），
+        出門時由路由器把來源改寫成唯一的公網 IP，並記住一筆<b>映射</b>：</p>
+      <pre class="code"><span class="c"># 路由器的 NAT 映射表</span>
+內部 192.168.1.10:5000  ⇄  外部 203.0.113.7:<span class="k">40001</span>   （目的地 8.8.8.8:53）
+<span class="c"># 回來的封包送到 203.0.113.7:40001 → 查表 → 轉給 192.168.1.10:5000</span>
+<span class="c"># 送到 203.0.113.7 其他 port、或來源不符合規則的封包 → 丟棄</span></pre>
+      <p>這對 Client–Server 沒問題（永遠是客戶端先發），但 P2P 需要<b>兩個都在 NAT 後面的人互連</b>，誰先發都會被對方的 NAT 擋下。
+        更麻煩的是電信商的 <b>CGNAT</b>（<code>100.64.0.0/10</code>），你的路由器外面還有一層 NAT，連 UPnP 開 port 都沒用。</p>
+
+      <h3>NAT 的兩個行為（RFC 4787）</h3>
+      <div class="grid-2">
+        <div class="card">
+          <h4>① 映射行為（Mapping）：對不同目的地，用不用同一個外部 port？</h4>
+          <ul>
+            <li><b>Endpoint-Independent（EIM）</b>：同一個內部 ip:port，不管送給誰，外部 port 都一樣。<span class="tag good">打洞友善</span></li>
+            <li><b>Address(-and-Port)-Dependent（ADM / APDM）</b>：送給不同目的地就換一個外部 port。STUN 伺服器看到的 port 跟對方看到的不一樣。<span class="tag bad">打洞殺手</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>② 過濾行為（Filtering）：誰可以從外面送封包進來？</h4>
+          <ul>
+            <li><b>Endpoint-Independent（EIF）</b>：任何人都能送到這個外部 port。</li>
+            <li><b>Address-Dependent（ADF）</b>：只有「我送過封包的 IP」可以送進來。</li>
+            <li><b>Address-and-Port-Dependent（APDF）</b>：只有「我送過封包的 IP:port」可以送進來。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>舊名稱（RFC 3489）</th><th>映射</th><th>過濾</th><th>常見於</th></tr>
+          <tr><td>🟢 Full Cone 完全錐形</td><td>EIM</td><td>EIF</td><td>開了 DMZ / 全開 port 的路由器</td></tr>
+          <tr><td>🟡 Restricted Cone 限制錐形</td><td>EIM</td><td>ADF</td><td>部分家用路由器</td></tr>
+          <tr><td>🟠 Port-Restricted Cone 埠限制錐形</td><td>EIM</td><td>APDF</td><td><b>最常見的家用路由器</b>（Linux iptables MASQUERADE 預設行為）</td></tr>
+          <tr><td>🔴 Symmetric 對稱型</td><td>APDM</td><td>APDF</td><td>企業防火牆、部分 4G/5G 行動網路、CGNAT</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 2：NAT 打洞模擬器（封包層級）</div>
+        <p class="small-note">A（192.168.1.10:5000）與 B（10.0.0.20:6000）分別躲在兩台 NAT 後面。STUN 伺服器 S 位於 192.0.2.1:3478。
+          逐步執行打洞流程，觀察兩邊 NAT 的映射表與每個封包是被放行還是丟棄。</p>
+        <div class="controls">
+          <div class="control"><span class="label">A 的 NAT 類型</span><select id="natTypeA"></select></div>
+          <div class="control"><span class="label">B 的 NAT 類型</span><select id="natTypeB"></select></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="natStep">▶ 下一步</button>
+          <button class="btn" id="natAll">⏩ 全部執行</button>
+          <button class="btn" id="natReset">↺ 重設</button>
+          <span class="small-note" id="natStepLabel"></span>
+        </div>
+        <div class="result-banner idle" id="natResult">按「下一步」開始。</div>
+        <div class="nat-stage">
+          <div class="nat-side"><h5>🏠 NAT A（公網 203.0.113.7）</h5><div id="natTableA"></div></div>
+          <div class="nat-side"><h5>🏢 NAT B（公網 198.51.100.9）</h5><div id="natTableB"></div></div>
+        </div>
+        <h4>封包紀錄</h4>
+        <div class="pkt-log" id="natLog"></div>
+        <h4>自動跑遍所有組合：哪些 NAT 組合可以直接打洞？</h4>
+        <p class="small-note">下表由同一個模擬器把 5×5 種組合全部跑一次算出來，不是寫死的。</p>
+        <div class="table-wrap"><table class="matrix" id="natMatrix"></table></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>選「埠限制錐形 ↔ 埠限制錐形」：第一個封包一定會被對方 NAT 丟掉，但它在<b>自己的</b> NAT 上開了一個洞；等對方的封包抵達時，洞已經在了。這就是為什麼要「同時」送。</li>
+            <li>選「對稱型 ↔ 埠限制錐形」：A 送往 B 時 NAT 換了一個新的外部 port，B 根據 STUN 拿到的舊 port 回送，被 A 的 NAT 丟掉 → 只能走 TURN 中繼。</li>
+            <li>選「對稱型 ↔ 限制錐形」卻能成功：因為限制錐形只檢查 IP 不檢查 port，B 收到 A 從新 port 送來的封包，就能學到 A 的真實位址（ICE 稱為 peer-reflexive 候選）並回送。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        <ul>
+          <li><b>「打洞是駭客技巧，會破壞安全性」</b>——不會。打洞只能在<b>雙方都主動同意</b>（都往對方送封包）時成立，NAT 的「只放行回應」規則一條都沒有被打破。</li>
+          <li><b>「打通一次就永遠通」</b>——UDP 映射通常 30 秒到幾分鐘沒流量就會過期，所以 WebRTC 會定期送 STUN Binding（consent freshness，RFC 7675）維持洞口。</li>
+          <li><b>「IPv6 就不需要打洞」</b>——IPv6 沒有 NAT，但家用路由器的防火牆通常仍是「只放行回應」的狀態式過濾，一樣需要雙方同時送封包。</li>
+        </ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 對稱型 NAT 讓打洞失敗的根本原因是？</p>
+          <ol class="opts"><li>它會丟掉所有 UDP 封包</li><li>它對不同目的地分配不同的外部 port，所以 STUN 看到的位址對另一個 peer 無效</li><li>它不支援 IPv4</li><li>它會加密封包</li></ol>
+          <div class="explain">STUN 只能告訴你「送給 STUN 伺服器時」的外部 port，對稱型 NAT 送給 peer 時會換成另一個無法預測的 port。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>2. 兩邊都是「埠限制錐形 NAT」時，為什麼第一個封包會被丟，但打洞仍會成功？</p>
+          <ol class="opts"><li>因為 NAT 會重送</li><li>因為 STUN 伺服器幫忙轉送</li><li>第一個封包雖然被對方丟掉，但已在自己的 NAT 上建立了「允許對方 IP:port 進來」的規則，對方的封包隨後就能進來</li><li>不會成功</li></ol>
+          <div class="explain">打洞依賴「雙方都送出去過」。先送的那方封包被丟沒關係，它的作用是在自己這端開洞。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. 下列哪個位址區段代表你可能在電信商的 CGNAT 後面？</p>
+          <ol class="opts"><li>100.64.0.0/10</li><li>8.8.8.0/24</li><li>224.0.0.0/4</li><li>127.0.0.0/8</li></ol>
+          <div class="explain">RFC 6598 保留 100.64.0.0/10 給電信商級 NAT 使用。如果你的路由器 WAN 拿到這段位址，外面還有一層 NAT。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="ice">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 3</span></div>
+      <h2>STUN / TURN / ICE：WebRTC 的 NAT 穿透三兄弟</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        <b>STUN</b> 告訴你「你在外面看起來是誰」；<b>TURN</b> 在打洞失敗時當中繼站；<b>ICE</b> 把所有可能的位址（候選）收集起來、兩兩配對、逐一測試，挑出<b>能通且最好</b>的那一條。
+      </div>
+
+      <h3>STUN：照鏡子</h3>
+      <p>STUN（RFC 8489）極其簡單：你送一個 <b>Binding Request</b> 給公網上的 STUN 伺服器，它把「看到的來源 IP:port」放在
+        <code>XOR-MAPPED-ADDRESS</code> 屬性裡回傳。這就是你的 <b>server-reflexive（srflx）</b> 位址。STUN 伺服器幾乎不耗頻寬，所以 Google 等公司提供免費的公開伺服器。</p>
+      <div class="card">
+        <div class="demo-title">實驗 3a：組一個 STUN Binding Success Response</div>
+        <p class="small-note">為什麼要 XOR？有些 NAT 的「應用層閘道（ALG）」會掃描封包內容，看到像自己公網 IP 的位元組就「好心」改寫，結果把 STUN 的答案改壞了。
+          把位址和 magic cookie <code>0x2112A442</code> 做 XOR 之後，ALG 就認不出來了。</p>
+        <div class="controls">
+          <div class="control"><label for="stunIp">你的公網 IP</label><input type="text" id="stunIp" value="203.0.113.7"></div>
+          <div class="control"><label for="stunPort">外部 port</label><input type="number" id="stunPort" value="40001" min="1" max="65535"></div>
+        </div>
+        <div class="hex" id="stunHex"></div>
+        <div class="hex-legend" id="stunLegend"></div>
+        <div class="hex-hover" id="stunHover">把滑鼠移到位元組上看說明</div>
+        <div class="small-note" id="stunCalc"></div>
+      </div>
+
+      <h3>TURN：打不通就繞路</h3>
+      <p>當雙方之間沒有任何一條路能直接打通（例如對稱型 NAT 對上埠限制錐形 NAT、或公司網路封鎖 UDP），就只能請 <b>TURN</b>（RFC 8656）伺服器當中繼：
+        客戶端向 TURN 伺服器 <code>Allocate</code> 一個<b>中繼位址（relay candidate）</b>，所有資料都經過伺服器轉送。TURN 可以跑在 TCP / TLS 443 上，幾乎穿得過任何防火牆，
+        但<b>每一個位元組都吃伺服器頻寬</b>——這就是 PairDrop 文件說「跨網路傳輸請自架 TURN」的原因。</p>
+
+      <h3>ICE：把所有路都試一遍</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>候選類型</th><th>從哪來</th><th>type preference（RFC 8445 建議）</th><th>例子</th></tr>
+          <tr><td><span class="tag acc">host</span></td><td>本機網卡位址（現代瀏覽器會改用隨機 <code>xxxx.local</code> mDNS 名稱保護隱私）</td><td class="num">126</td><td><code>192.168.1.10:5000</code></td></tr>
+          <tr><td><span class="tag">prflx</span> peer-reflexive</td><td>連線檢查過程中，從對方回應「意外」學到的位址</td><td class="num">110</td><td>對稱型 NAT 送往 peer 時的新 port</td></tr>
+          <tr><td><span class="tag good">srflx</span> server-reflexive</td><td>STUN 伺服器回報的 NAT 外部位址</td><td class="num">100</td><td><code>203.0.113.7:40001</code></td></tr>
+          <tr><td><span class="tag warn">relay</span></td><td>TURN 伺服器分配的中繼位址</td><td class="num">0</td><td><code>turn.example.com:49152</code></td></tr>
+        </table>
+      </div>
+      <div class="formula">
+        候選優先權 = 2<sup>24</sup> × <span class="hl">type pref</span> + 2<sup>8</sup> × local pref + (256 − component ID)
+        <br>配對優先權 = 2<sup>32</sup> × min(<var>G</var>, <var>D</var>) + 2 × max(<var>G</var>, <var>D</var>) + (<var>G</var> &gt; <var>D</var> ? 1 : 0)
+        <span class="note"><var>G</var>：controlling 端（通常是發 offer 的一方）候選的優先權；<var>D</var>：controlled 端。這樣設計讓雙方算出完全相同的排序，不需要協商。
+          type pref 讓「直連」永遠優先於「中繼」。</span>
+      </div>
+      <p>ICE 的流程：① 各自<b>收集候選</b> → ② 透過信令<b>交換候選</b>（Trickle ICE 可以邊收集邊送）→ ③ 兩兩<b>配對</b>並依優先權排序 →
+        ④ 對每一對送 STUN Binding 做<b>連線檢查</b> → ⑤ controlling 端<b>提名（nominate）</b>最好的成功配對 → 開始傳資料。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 3b：ICE 連線檢查模擬器</div>
+        <p class="small-note">選擇一個網路情境。打洞能否成功，是直接呼叫第 2 章的 NAT 模擬器算出來的。</p>
+        <div class="controls">
+          <div class="control" style="flex-basis:100%"><span class="label">情境</span>
+            <div class="seg" id="iceScenario">
+              <button data-value="lan" class="active">同一個 Wi-Fi</button>
+              <button data-value="cone">不同網路・兩邊埠限制錐形</button>
+              <button data-value="symres">A 對稱型 ↔ B 限制錐形</button>
+              <button data-value="symport">A 對稱型（4G）↔ B 埠限制錐形</button>
+              <button data-value="udpblock">A 在封鎖 UDP 的公司網路</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div><h4>A 的候選（controlling）</h4><div class="cand-list" id="iceCandA"></div></div>
+          <div><h4>B 的候選（controlled）</h4><div class="cand-list" id="iceCandB"></div></div>
+        </div>
+        <h4>檢查清單（Checklist，依配對優先權排序）</h4>
+        <div class="btn-row"><button class="btn primary" id="iceRun">▶ 執行連線檢查</button></div>
+        <div class="table-wrap"><table id="icePairs"></table></div>
+        <div class="result-banner idle" id="iceResult">按「執行連線檢查」。</div>
+        <div class="box pitfall"><span class="box-title">💡 為什麼 A 的 srflx 不出現在配對裡？</span>
+          封包永遠是從本機網卡（host）送出的，NAT 才把它變成 srflx。RFC 8445 規定本地 srflx 候選在配對時要替換成它的「基底」（base，即 host 候選），
+          替換後與既有的 host 配對重複，因此被<b>剪除（prune）</b>。srflx 的價值在於<b>讓對方知道</b>該往哪裡送。
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 3c：看看「你自己」的 ICE 候選（真實 WebRTC）</div>
+        <p class="small-note">這會在你的瀏覽器建立一個真的 <code>RTCPeerConnection</code>，列出它收集到的候選，並把優先權拆回公式的三個部分。
+          勾選 STUN 時會連線到 Google 的公開 STUN 伺服器 <code>stun.l.google.com:19302</code>（只會送出一個 Binding Request，回傳你的公網 IP）。</p>
+        <div class="btn-row">
+          <label class="small-note"><input type="checkbox" id="gatherStun" checked> 使用公開 STUN 伺服器</label>
+          <button class="btn primary" id="gatherGo">🔍 收集候選</button>
+        </div>
+        <div class="cand-list" id="gatherOut" style="margin-top:10px"></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>host 候選通常是 <code>xxxxxxxx-xxxx-….local</code>：瀏覽器用 mDNS 隱藏你的區網 IP，避免網站拿它做指紋追蹤。</li>
+            <li>srflx 候選的 <code>raddr</code> 就是它的 base。如果你在對稱型 NAT 後面，每次連到不同 STUN 伺服器會拿到不同 port。</li>
+            <li>你也會看到 TCP 候選（<code>tcptype active</code>），它們的 type pref 比 UDP 低。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="3">
+          <p>1. 哪一種候選最可能讓所有資料都經過第三方伺服器？</p>
+          <ol class="opts"><li>host</li><li>srflx</li><li>prflx</li><li>relay</li></ol>
+          <div class="explain">relay 候選是 TURN 伺服器上的位址，資料要經過伺服器轉送。STUN 只參與「照鏡子」，不轉送資料。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. 同一個 Wi-Fi 下的兩台電腦，ICE 最後通常會選哪一種配對？</p>
+          <ol class="opts"><li>relay ↔ relay</li><li>host ↔ host</li><li>srflx ↔ relay</li><li>一定要經過 STUN 伺服器</li></ol>
+          <div class="explain">host 的 type pref 最高（126），而且同網段可以直接互通，所以 host ↔ host 優先權最高且會成功。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>3. STUN 回應中的位址為什麼要跟 magic cookie 做 XOR？</p>
+          <ol class="opts"><li>為了加密，防止被竊聽</li><li>為了壓縮封包</li><li>避免 NAT 的 ALG 在封包內容中看到自己的 IP 而擅自改寫</li><li>為了相容 IPv8</li></ol>
+          <div class="explain">XOR 不是加密（任何人都能反算），目的只是讓位址「看起來不像位址」。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="signal">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 4</span></div>
+      <h2>信令與裝置發現：ShareDrop vs PairDrop</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        WebRTC 標準<b>刻意不規定</b>雙方怎麼交換 SDP 與 ICE 候選——這叫<b>信令（signaling）</b>，由應用自己決定。
+        PairDrop（源自 Snapdrop）用自架的 <b>Node.js WebSocket 伺服器</b>；ShareDrop 用 <b>Firebase Realtime Database</b>。
+        兩者都用「<b>相同公網 IP = 同一個區網</b>」這個簡單規則來決定誰看得到誰。
+      </div>
+
+      <h3>信令要傳什麼？</h3>
+      <ul>
+        <li><b>SDP offer / answer</b>：我想開什麼通道、我的 ICE 帳密（<code>ice-ufrag</code> / <code>ice-pwd</code>）、我的 DTLS 憑證指紋（<code>a=fingerprint</code>）。</li>
+        <li><b>ICE 候選</b>：我可能的位址（第 3 章）。</li>
+        <li><b>在線狀態（presence）</b>：誰上線、誰離線——這不屬於 WebRTC，但「隔空投送」類應用一定需要。</li>
+      </ul>
+      <p>連上之後，信令伺服器就功成身退：檔案內容走 WebRTC DataChannel 直連（或經過 TURN），<b>信令伺服器看不到檔案</b>。</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h4>🟦 PairDrop / Snapdrop：WebSocket 伺服器</h4>
+          <ul>
+            <li>瀏覽器開啟網頁時建立一條 WebSocket 長連線。</li>
+            <li>伺服器讀取連線的來源 IP（在反向代理後面時讀 <code>X-Forwarded-For</code>），<b>同一個 IP 的 peer 放進同一個房間</b>，推送 <code>peers</code>、<code>peer-joined</code>、<code>peer-left</code> 事件。</li>
+            <li>需要信令時，A 送出 <code>{type:'signal', to:B, sdp|ice}</code>，伺服器只看 <code>to</code> 欄位轉給 B。</li>
+            <li>PairDrop 的擴充：
+              <b>配對裝置</b>（輸入 6 位數字或掃 QR code，雙方存下共同的秘密，之後跨網路也看得到彼此）、
+              <b>公開房間</b>（輸入房間代碼臨時加入）、可設定 STUN/TURN（<code>RTC_CONFIG</code>）、
+              以及可選的 WebSocket 備援（<code>WS_FALLBACK</code>，此時檔案會經過伺服器，不再是 P2P）。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>🟧 ShareDrop：Firebase</h4>
+          <ul>
+            <li>不用自己維護長連線伺服器，改用 Firebase Realtime Database 的即時同步做<b>在線狀態與信令</b>。</li>
+            <li>房間名稱由伺服器依你的<b>公網 IP</b>（加上設定的 <code>SECRET</code>）算出，所以同一個區網的人會進同一個房間；也可以建立自訂網址的房間跨網路分享。</li>
+            <li>每個使用者把自己寫進房間節點，並設定 <code>onDisconnect().remove()</code>：關掉分頁時 Firebase 自動移除，其他人收到 <code>child_removed</code> 事件。</li>
+            <li>SDP 與 ICE 候選同樣寫進資料庫、由對方的監聽器讀出。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 4a：「同一個公網 IP」分房規則的效果與陷阱</div>
+        <p class="small-note">點選任一台裝置，看它在 ShareDrop / PairDrop 的畫面上會看到誰（綠框）。再切換分房策略、試試配對與公開房間。</p>
+        <div class="controls">
+          <div class="control" style="flex-basis:100%"><span class="label">分房策略</span>
+            <div class="seg" id="roomStrategy">
+              <button data-value="ip" class="active">完整公網 IP（Snapdrop / ShareDrop）</button>
+              <button data-value="ip6">IPv6 只看前 64 bits（PairDrop 的 IPV6_LOCALIZE 選項）</button>
+            </div>
+          </div>
+        </div>
+        <div class="net-grid" id="roomNets"></div>
+        <div class="controls" style="margin-top:14px">
+          <div class="control"><span class="label">🔗 配對兩台裝置（PairDrop）</span>
+            <div class="btn-row"><select id="pairA" style="width:auto"></select><select id="pairB" style="width:auto"></select><button class="btn small" id="pairGo">產生配對碼並配對</button></div>
+          </div>
+          <div class="control"><span class="label">🚪 加入公開房間（PairDrop）</span>
+            <div class="btn-row"><select id="pubDev" style="width:auto"></select><input type="text" id="pubCode" value="KX7QF" style="width:90px"><button class="btn small" id="pubGo">加入</button></div>
+          </div>
+        </div>
+        <div class="btn-row"><button class="btn small" id="roomReset">↺ 清除配對與房間</button></div>
+        <h4>伺服器端的房間表</h4>
+        <div class="table-wrap"><table id="roomTable"></table></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>點「4G 路人甲」：他會看到完全不認識的「路人乙」——因為電信商 CGNAT 讓成千上萬人共用同一個公網 IP。VPN、公司網路、大學宿舍也一樣。</li>
+            <li>點 IPv6 家庭的筆電：在「完整 IP」策略下它誰都看不到，因為 IPv6 下每台裝置都有自己的公網位址；改成只看前 64 bits（同一個子網路）就正常了。</li>
+            <li>配對後，咖啡店的朋友手機和家裡的筆電能互相看到——這就是 PairDrop 名字中「Pair」的由來。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 4b：一次完整的「隔空投送」信令流程</div>
+        <div class="controls">
+          <div class="control"><span class="label">信令後端</span>
+            <div class="seg" id="seqBackend">
+              <button data-value="ws" class="active">WebSocket（PairDrop 式）</button>
+              <button data-value="fb">Firebase（ShareDrop 式）</button>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="seqPrev">◀ 上一步</button>
+          <button class="btn primary" id="seqNext">下一步 ▶</button>
+          <button class="btn" id="seqPlay">⏯ 自動播放</button>
+          <span class="small-note" id="seqCount"></span>
+        </div>
+        <div class="seq-wrap" id="seqSvg" style="margin-top:10px"></div>
+        <div class="step-box" id="seqDetail"></div>
+        <p class="small-note">訊息格式為教學用的簡化示意，概念與 Snapdrop / PairDrop、ShareDrop 一致，但欄位名稱不保證與其原始碼完全相同。綠色箭頭代表不經過伺服器的直接流量。</p>
+      </div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 信令伺服器的權力比你想的大</span>
+        DTLS 會加密 DataChannel，但「對方的憑證指紋」是透過信令送來的。惡意的信令伺服器可以把雙方的 <code>a=fingerprint</code> 都換成自己的，
+        做中間人攻擊（MITM）而不被察覺。所以信令必須走 HTTPS / WSS，而且你要信任信令伺服器的營運者——這也是 PairDrop 開源並鼓勵自架的原因之一。<b>第 11 章</b>會示範如何用 DID 簽章讓信令伺服器不再需要被信任。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. PairDrop 的 WebSocket 伺服器在一般 P2P 傳檔中，<b>不會</b>經手哪一樣東西？</p>
+          <ol class="opts"><li>SDP offer / answer</li><li>ICE 候選</li><li>檔案內容</li><li>誰上線、誰離線的通知</li></ol>
+          <div class="explain">檔案內容走 WebRTC DataChannel。只有開啟 WS_FALLBACK 且某一方不支援 WebRTC 時，檔案才會經過伺服器。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 為什麼用「相同公網 IP」判斷同一區網，在行動網路上會出問題？</p>
+          <ol class="opts"><li>電信商 CGNAT 讓大量不相干的使用者共用同一個公網 IP</li><li>手機不支援 WebRTC</li><li>4G 沒有 IP 位址</li><li>Firebase 不支援手機</li></ol>
+          <div class="explain">陌生人可能出現在你的裝置清單裡（雖然對方仍需你接受檔案）。反過來，IPv6 讓同一個家裡的裝置 IP 都不同。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>3. ShareDrop 使用者關閉分頁後，其他人的畫面上如何知道他離開了？</p>
+          <ol class="opts"><li>其他人每秒 ping 他</li><li>WebRTC 會廣播離線訊息</li><li>STUN 伺服器通知</li><li>預先設定的 Firebase <code>onDisconnect()</code> 由伺服器端自動刪除他的節點，觸發其他人的監聽事件</li></ol>
+          <div class="explain">onDisconnect 是在連線時就交給 Firebase 伺服器的「遺囑」，即使瀏覽器當掉也會執行。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="webrtc">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 5</span></div>
+      <h2>WebRTC DataChannel：檔案怎麼真的傳過去</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        DataChannel 是疊在 UDP 上的一整套協定：<b>ICE</b> 找路 → <b>DTLS</b> 加密 → <b>SCTP</b> 提供可靠、有序、多串流的訊息傳遞。
+        應用層把檔案<b>切塊（chunk）</b>送出，並用 <code>bufferedAmount</code> 做<b>背壓（backpressure）</b>，否則會塞爆傳送佇列。
+      </div>
+
+      <div class="stack">
+        <div class="l1">你的程式：<code>dc.send(chunk)</code><small>檔案切塊、自訂 header（檔名、大小、MIME）</small></div>
+        <div class="l1">RTCDataChannel / DCEP<small>RFC 8832：用一個 DATA_CHANNEL_OPEN 訊息開通道，標註 label 與可靠性</small></div>
+        <div class="l2">SCTP<small>RFC 8831：可選擇 可靠/不可靠、有序/無序；多串流避免隊頭阻塞；有自己的擁塞控制</small></div>
+        <div class="l2">DTLS 1.2 / 1.3<small>強制加密；用 SDP 裡的 a=fingerprint 驗證對方憑證</small></div>
+        <div class="l3">ICE（STUN 連線檢查 + consent freshness）<small>第 3 章選出來的那條路</small></div>
+        <div class="l3">UDP / IP<small>（或經過 TURN 中繼）</small></div>
+      </div>
+
+      <pre class="code"><span class="c">// 發送端（offerer）最小範例</span>
+<span class="k">const</span> pc = <span class="k">new</span> RTCPeerConnection({ iceServers: [{ urls: <span class="s">'stun:stun.l.google.com:19302'</span> }] });
+<span class="k">const</span> dc = pc.createDataChannel(<span class="s">'file'</span>, { ordered: <span class="k">true</span> });   <span class="c">// 預設可靠、有序</span>
+pc.onicecandidate = e => e.candidate &amp;&amp; signaling.send({ to: peer, ice: e.candidate });   <span class="c">// Trickle ICE</span>
+<span class="k">await</span> pc.setLocalDescription(<span class="k">await</span> pc.createOffer());
+signaling.send({ to: peer, sdp: pc.localDescription });
+
+<span class="c">// 接收端（answerer）</span>
+pc.ondatachannel = e => { e.channel.onmessage = m => chunks.push(m.data); };
+<span class="k">await</span> pc.setRemoteDescription(offer);
+<span class="k">await</span> pc.setLocalDescription(<span class="k">await</span> pc.createAnswer());
+signaling.send({ to: peer, sdp: pc.localDescription });
+<span class="c">// 雙方收到對方的 ice 時：await pc.addIceCandidate(ice)</span></pre>
+
+      <h3>為什麼要切塊？為什麼要背壓？</h3>
+      <ul>
+        <li><b>訊息大小上限</b>：SDP 裡的 <code>a=max-message-size</code> 宣告單一訊息上限（常見 262144 = 256 KiB）。過去不同瀏覽器之間只有 16 KiB 能保證互通，所以很多程式用 16–64 KiB 的 chunk。</li>
+        <li><b>傳送佇列有上限</b>：<code>send()</code> 只是把資料放進佇列就立刻返回。如果你在迴圈裡把 1 GB 一口氣 send 出去，佇列會爆（Chrome 的上限約 16 MiB，超過時 <code>send()</code> 會丟出「send queue is full」錯誤，舊版甚至直接關閉通道），記憶體也會飆高。</li>
+        <li><b>正確作法</b>：設定 <code>bufferedAmountLowThreshold</code>，當 <code>bufferedAmount</code> 超過某個水位就暫停，等 <code>bufferedamountlow</code> 事件再繼續。Snapdrop 的做法類似：每 64 KB 一塊，每 1 MB 等接收端回覆一次 <code>partition-received</code> 才繼續。</li>
+      </ul>
+
+      <div class="card">
+        <div class="demo-title">實驗 5：在同一個頁面裡建立真的 WebRTC 連線並傳檔</div>
+        <p class="small-note">這裡建立兩個 <code>RTCPeerConnection</code>（左手與右手），信令直接用 JavaScript 變數傳遞。資料真的經過 ICE → DTLS → SCTP，只是兩端剛好在同一台電腦。</p>
+        <div class="btn-row">
+          <button class="btn primary" id="lbConnect">① 建立連線</button>
+          <span id="lbState" class="small-note"></span>
+        </div>
+        <div class="lab-log" id="lbLog" style="margin-top:8px;max-height:180px"></div>
+        <h4>剛剛產生的 SDP offer（把滑鼠移到每一行看說明）</h4>
+        <div class="sdp-lines" id="lbSdp"><div>（建立連線後顯示）</div></div>
+        <div class="sdp-explain" id="lbSdpExplain">每一行都是 <code>類型=值</code>。有藍色邊條的行有說明。</div>
+        <h4>② 傳送檔案</h4>
+        <div class="controls">
+          <div class="control"><span class="label">資料來源</span>
+            <div class="btn-row"><input type="file" id="lbFile" style="max-width:220px"><span class="small-note">或</span><button class="btn small" id="lbGen">產生 32 MiB 隨機資料</button></div>
+          </div>
+          <div class="control"><span class="label">Chunk 大小</span>
+            <div class="seg" id="lbChunk"><button data-value="16384">16 KiB</button><button data-value="65536" class="active">64 KiB</button><button data-value="262144">256 KiB</button></div>
+          </div>
+          <div class="control"><span class="label">背壓控制</span>
+            <div class="seg" id="lbBp"><button data-value="on" class="active">開（等 bufferedamountlow）</button><button data-value="off">關（一口氣全部 send）</button></div>
+          </div>
+        </div>
+        <div class="btn-row"><button class="btn primary" id="lbSend" disabled>▶ 傳送</button><span class="small-note" id="lbSrcInfo">尚未選擇資料</span></div>
+        <div class="metrics" id="lbMetrics"></div>
+        <div class="bar good" style="margin:6px 0"><div id="lbBar"></div></div>
+        <div class="canvas-box"><canvas id="lbCanvas" style="height:180px"></canvas></div>
+        <div class="legend"><span style="--sw:var(--warn)">bufferedAmount（傳送佇列中的位元組）</span><span style="--sw:var(--good)">已收到</span></div>
+        <div id="lbDone"></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>背壓「開」時，佇列水位在門檻附近上下震盪；「關」時佇列會瞬間衝到上限，超過後 <code>send()</code> 直接丟出錯誤（實驗會把錯誤顯示出來）。</li>
+            <li>傳完後比對 SHA-256：DataChannel 預設可靠且有序，所以收到的位元組與送出的完全相同。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. WebRTC DataChannel 的加密是由哪一層提供的？</p>
+          <ol class="opts"><li>SCTP</li><li>DTLS</li><li>ICE</li><li>應用程式要自己做，WebRTC 不加密</li></ol>
+          <div class="explain">WebRTC 強制使用 DTLS（資料通道）與 SRTP（影音，金鑰由 DTLS 協商），沒有不加密的選項。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>2. 在迴圈裡不停呼叫 <code>dc.send()</code> 傳大檔案，最可能發生什麼事？</p>
+          <ol class="opts"><li>瀏覽器自動幫你切塊與等待</li><li>傳輸變得更快</li><li>對方收到的資料會亂序</li><li><code>bufferedAmount</code> 暴增，超過佇列上限時 <code>send()</code> 丟出錯誤，記憶體也跟著飆高</li></ol>
+          <div class="explain">send() 是非同步放進佇列；要自己看 bufferedAmount 做背壓。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. 想做多人連線遊戲的位置同步，「舊資料不如新資料」，DataChannel 該怎麼設定？</p>
+          <ol class="opts"><li><code>{ ordered: false, maxRetransmits: 0 }</code>（不可靠、無序）</li><li>預設值即可</li><li>改用 TURN</li><li>chunk 設為 256 KiB</li></ol>
+          <div class="explain">SCTP 讓同一條連線可以有不可靠的通道，避免重傳舊封包造成延遲，類似 UDP 的語意。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="lab">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 6</span></div>
+      <h2>實戰：在瀏覽器裡自己做一個迷你 PairDrop</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        把前面學的全部串起來：<b>發現</b>（誰在線上）→ <b>信令</b>（交換 SDP / ICE）→ <b>ICE + DTLS</b> → <b>DataChannel 傳訊息與檔案</b>。
+        這裡提供兩種信令方式：同瀏覽器分頁之間用 <code>BroadcastChannel</code> 當作「WebSocket 伺服器」；跨裝置則由<b>你自己複製貼上</b>當信令伺服器。
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 6a：自動發現模式（同一個瀏覽器的多個分頁）</div>
+        <p class="small-note"><code>BroadcastChannel</code> 讓同一來源（origin）的分頁互相廣播訊息，扮演 PairDrop 伺服器的角色：
+          每個分頁上線時廣播 <code>hello</code>，其他分頁回 <code>here</code>，關閉時送 <code>bye</code>；之後的 offer / answer / ice 也透過它轉送，但<b>聊天與檔案走 WebRTC</b>。
+          （用 <code>file://</code> 開啟時，部分瀏覽器不讓分頁互通，請改用本機伺服器或 GitHub Pages 線上版。）</p>
+        <div class="btn-row">
+          <button class="btn primary" id="bcOpenTab">➕ 在新分頁開啟本頁</button>
+          <span class="small-note">你在這個分頁的名字：<b id="bcMyName">—</b></span>
+        </div>
+        <h4>附近的裝置</h4>
+        <div class="peer-list" id="bcPeers"><div class="small-note">（還沒有其他分頁。按上面的按鈕開一個新分頁，並在那邊捲到本章。）</div></div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 6b：手動信令模式（跨裝置：你就是信令伺服器）</div>
+        <p class="small-note">把 offer 文字傳給另一台裝置（任何方式：聊天軟體、Email、QR code），對方產生 answer 再傳回來。這裡採用「非 Trickle」做法：等 ICE 收集完再一次給出完整 SDP，所以只需要來回各一次。
+          同一個區網通常可以直接連上；跨網路需要勾選 STUN，且兩邊 NAT 必須能打洞（第 2 章的表）。</p>
+        <div class="btn-row">
+          <label class="small-note"><input type="checkbox" id="manStun" checked> 使用公開 STUN 伺服器</label>
+        </div>
+        <div class="grid-2">
+          <div>
+            <h4>我是發起方</h4>
+            <div class="btn-row"><button class="btn primary" id="manOffer">① 產生 offer</button><button class="btn small" id="manCopyOffer">📋 複製</button></div>
+            <textarea id="manOfferOut" readonly placeholder="offer 會出現在這裡，傳給對方"></textarea>
+            <p class="small-note">③ 把對方回傳的 answer 貼在這裡：</p>
+            <textarea id="manAnswerIn" placeholder="貼上 answer"></textarea>
+            <button class="btn" id="manAccept">④ 連線</button>
+          </div>
+          <div>
+            <h4>我是接收方</h4>
+            <p class="small-note">② 貼上對方的 offer：</p>
+            <textarea id="manOfferIn" placeholder="貼上 offer"></textarea>
+            <div class="btn-row"><button class="btn primary" id="manAnswer">產生 answer</button><button class="btn small" id="manCopyAnswer">📋 複製</button></div>
+            <textarea id="manAnswerOut" readonly placeholder="answer 會出現在這裡，傳回給發起方"></textarea>
+          </div>
+        </div>
+        <div class="peer-list" id="manPeer" style="margin-top:12px"></div>
+      </div>
+
+      <div class="box recap"><span class="box-title">📌 對照真實系統</span>
+        <div class="table-wrap">
+          <table>
+            <tr><th>這個實驗</th><th>PairDrop</th><th>ShareDrop</th></tr>
+            <tr><td>BroadcastChannel 的 hello / here / bye</td><td>WebSocket 伺服器的 peers / peer-joined / peer-left</td><td>Firebase 房間節點 + onDisconnect</td></tr>
+            <tr><td>「同一個瀏覽器」= 同一個房間</td><td>同一個公網 IP、配對裝置、公開房間</td><td>同一個公網 IP 或自訂房間網址</td></tr>
+            <tr><td>手動複製貼上 SDP</td><td>伺服器轉送 <code>signal</code> 訊息</td><td>寫進資料庫讓對方讀取</td></tr>
+            <tr><td>16 KiB chunk + bufferedAmount 背壓</td><td>64 KB chunk + 每 1 MB 確認</td><td>分塊傳送並回報進度</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 手動信令模式中，為什麼要等 ICE 收集完才輸出 offer？</p>
+          <ol class="opts"><li>因為 WebRTC 規定必須這樣</li><li>為了讓 SDP 變短</li><li>手動複製貼上無法即時「邊收集邊送」候選，所以把所有候選一次放進 SDP</li><li>為了加密</li></ol>
+          <div class="explain">Trickle ICE 需要一條能持續傳訊息的信令通道；人工複製貼上只適合一次送完。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>2. 實驗 6a 中把 BroadcastChannel 換成什麼，就能讓不同電腦互相發現？</p>
+          <ol class="opts"><li>localStorage</li><li>一台所有人都連得到的 WebSocket（或 Firebase 等即時資料庫）伺服器</li><li>STUN 伺服器</li><li>更大的 chunk</li></ol>
+          <div class="explain">這正是 PairDrop / ShareDrop 的架構：伺服器負責「誰在線上」與轉送信令。STUN 只會回報你的位址，不會轉送訊息。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="torrent">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 7</span></div>
+      <h2>BitTorrent ①：.torrent、bencode 與 infohash</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        BitTorrent 把檔案切成固定大小的 <b>piece</b>，每個 piece 算一個 <b>SHA-1</b>，全部寫進 .torrent 的 <code>info</code> 字典。
+        <code>info</code> 字典的 SHA-1 就是 <b>infohash</b>——它是這份內容在整個 BitTorrent 世界的<b>身分證</b>：找 peer、驗證資料、磁力連結都靠它。
+      </div>
+
+      <h3>切塊：piece 與 block</h3>
+      <ul>
+        <li><b>Piece</b>：驗證的單位。大小是 2 的次方（常見 256 KiB – 4 MiB）。下載完一個 piece 就算 SHA-1，跟 .torrent 裡記錄的比對，不符就丟掉重下。</li>
+        <li><b>Block</b>：傳輸的單位。向 peer 請求時一次要 16 KiB（<code>request</code> 訊息），一個 piece 由多個 block 組成。</li>
+        <li>因為有每個 piece 的雜湊，你可以<b>同時從幾十個陌生人</b>那裡拿不同的 piece，而不必信任任何一個人——壞資料一定會被發現。</li>
+      </ul>
+
+      <h3>bencode：BitTorrent 的資料格式</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>型別</th><th>格式</th><th>例子</th></tr>
+          <tr><td>整數</td><td><code>i</code>數字<code>e</code></td><td><code>i42e</code> → 42</td></tr>
+          <tr><td>位元組字串</td><td>長度<code>:</code>內容</td><td><code>4:spam</code> → "spam"</td></tr>
+          <tr><td>串列</td><td><code>l</code>…<code>e</code></td><td><code>l4:spami42ee</code> → ["spam", 42]</td></tr>
+          <tr><td>字典</td><td><code>d</code>鍵值…<code>e</code>，<b>鍵必須依位元組順序排序</b></td><td><code>d3:cow3:moo4:spam4:eggse</code></td></tr>
+        </table>
+      </div>
+      <p>為什麼要強制排序？因為 infohash 是對 bencode 後的位元組算 SHA-1，<b>同一份資料必須只有一種編碼</b>（canonical encoding），否則每個人算出來的 infohash 都不一樣。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 7a：bencode 遊樂場</div>
+        <div class="grid-2">
+          <div>
+            <label class="small-note" for="bencIn">JSON（物件鍵順序隨你寫）</label>
+            <textarea id="bencIn" rows="7">{"spam": ["a", "b"], "cow": "moo", "answer": 42, "info": {"name": "hello.txt", "length": 1234}}</textarea>
+          </div>
+          <div>
+            <div class="small-note">bencode 輸出（注意鍵已經排序）</div>
+            <div class="bencode-out" id="bencOut"></div>
+            <div class="small-note" id="bencInfo"></div>
+          </div>
+        </div>
+        <label class="small-note" for="bencDecIn" style="display:block;margin-top:10px">反向：貼上 bencode 字串解碼</label>
+        <input type="text" id="bencDecIn" value="d8:announce39:udp://tracker.example.org:1337/announce4:infod6:lengthi5e4:name5:a.txtee">
+        <div class="tree" id="bencDecOut" style="margin-top:6px"></div>
+      </div>
+
+      <h3>.torrent 檔的結構</h3>
+      <pre class="code">{
+  <span class="s">"announce"</span>: <span class="s">"udp://tracker.example.org:1337/announce"</span>,   <span class="c">// Tracker 網址</span>
+  <span class="s">"announce-list"</span>: [[…], […]],                        <span class="c">// 備用 tracker（BEP 12）</span>
+  <span class="s">"creation date"</span>: 1763800000, <span class="s">"created by"</span>: <span class="s">"…"</span>,
+  <span class="k">"info"</span>: {                                             <span class="c">// ← 只有這部分參與 infohash</span>
+    <span class="s">"name"</span>: <span class="s">"ubuntu.iso"</span>,
+    <span class="s">"piece length"</span>: 262144,                           <span class="c">// 256 KiB</span>
+    <span class="s">"pieces"</span>: &lt;20 bytes × piece 數 的原始 SHA-1&gt;,
+    <span class="s">"length"</span>: 5368709120                              <span class="c">// 單檔；多檔改用 "files": [{length, path:[…]}]</span>
+  }
+}
+<span class="k">infohash</span> = SHA-1( bencode(info) )   → 20 bytes，通常以 40 個 hex 字元表示</pre>
+      <p>tracker 網址不在 <code>info</code> 裡，所以換 tracker 不會改變 infohash，同一份內容的所有 swarm 仍然是同一個。
+        <b>磁力連結</b>只帶 infohash：<code>magnet:?xt=urn:btih:&lt;infohash&gt;&amp;dn=名稱&amp;tr=tracker</code>。
+        沒有 .torrent 時，客戶端先用 DHT 找到 peer，再用 <b>ut_metadata</b>（BEP 9）向 peer 要 <code>info</code> 字典，收到後算 SHA-1 確認等於 infohash 才採用。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 7b：在瀏覽器裡做一個真的 .torrent</div>
+        <p class="small-note">選擇一個或多個檔案（全部在本機計算，不會上傳）。也可以載入一個現成的 .torrent 檔來解析它的內容並計算 infohash。</p>
+        <div class="controls">
+          <div class="control"><span class="label">要分享的檔案</span><input type="file" id="tfFiles" multiple></div>
+          <div class="control"><span class="label">Piece 大小</span>
+            <div class="seg" id="tfPiece"><button data-value="16384">16 KiB</button><button data-value="65536">64 KiB</button><button data-value="262144" class="active">256 KiB</button><button data-value="1048576">1 MiB</button><button data-value="4194304">4 MiB</button></div>
+          </div>
+          <div class="control"><label for="tfTracker">Tracker</label><input type="text" id="tfTracker" value="udp://tracker.example.org:1337/announce"></div>
+          <div class="control"><span class="label">或：載入現成的 .torrent</span><input type="file" id="tfLoad" accept=".torrent,application/x-bittorrent"></div>
+        </div>
+        <div class="btn-row"><button class="btn small" id="tfDemo">沒有檔案？用一段 1 MiB 範例資料</button></div>
+        <div class="bar" style="margin:10px 0"><div id="tfBar"></div></div>
+        <div id="tfOut"></div>
+        <div class="pieces" id="tfPieces"></div>
+        <div class="btn-row" id="tfActions" hidden>
+          <button class="btn primary" id="tfDownload">⬇ 下載 .torrent</button>
+          <button class="btn" id="tfCorrupt">🧨 模擬收到一個被竄改的 piece</button>
+        </div>
+        <div id="tfVerify"></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>每個方塊代表一個 piece，顏色取自它 SHA-1 的前幾個位元組。把 piece 大小調小，方塊數變多，<code>pieces</code> 欄位（與 .torrent 檔）就變大。</li>
+            <li>按「模擬竄改」：只翻轉一個位元，那個 piece 的 SHA-1 就完全不同（雪崩效應），客戶端會丟棄它並向別人重下。</li>
+            <li>換一個 Tracker 網址再產生一次：infohash <b>不變</b>，因為 tracker 不在 info 字典裡。改檔名則會改變 infohash。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ SHA-1 已經不安全了嗎？</span>
+        SHA-1 在 2017 年被實際做出碰撞（SHAttered）。BitTorrent v2（BEP 52）因此改用 <b>SHA-256</b>，並把每個檔案組成 16 KiB 葉節點的 <b>Merkle tree</b>，
+        infohash 變成 32 bytes（磁力連結用 <code>urn:btmh:</code>）。「混合式」torrent 同時帶有 v1 與 v2 的資訊，新舊客戶端都能加入。
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 兩個 .torrent 的內容、piece 大小、檔名完全相同，只有 announce 網址不同，它們的 infohash？</p>
+          <ol class="opts"><li>不同</li><li>看 tracker 而定</li><li>相同，因為 announce 不在 info 字典裡</li><li>無法比較</li></ol>
+          <div class="explain">infohash 只對 info 字典算雜湊。這讓同一份內容可以出現在不同 tracker，仍屬於同一個 swarm（透過 DHT 合流）。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. bencode 的字典鍵為什麼必須排序？</p>
+          <ol class="opts"><li>確保同一份資料只有唯一的編碼，大家算出相同的 infohash</li><li>讓解碼比較快</li><li>為了壓縮</li><li>沒有原因</li></ol>
+          <div class="explain">雜湊對位元組敏感，順序不同雜湊就不同。canonical encoding 是「對結構化資料算雜湊」的必要條件。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>3. 為什麼你可以放心從完全陌生的 peer 下載 piece？</p>
+          <ol class="opts"><li>BitTorrent 傳輸有 TLS 加密</li><li>Tracker 會審核每個 peer</li><li>peer 都必須實名註冊</li><li>每個 piece 都會用 .torrent 裡的雜湊驗證，不符就丟棄</li></ol>
+          <div class="explain">信任建立在 .torrent（或 infohash）本身：只要你的 .torrent 是對的，任何人都騙不了你資料內容。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="wire">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 8</span></div>
+      <h2>BitTorrent ②：Tracker 與 Peer Wire Protocol</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        <b>Tracker</b> 只做一件事：記住「誰在下載哪個 infohash」，回傳一串 peer 的 IP:port。之後 peer 之間用 TCP（或 uTP）跑 <b>Peer Wire Protocol</b>：
+        68 bytes 的 handshake，接著是「4 bytes 長度 + 1 byte 訊息 ID + 內容」的簡單訊息。
+      </div>
+
+      <h3>Tracker announce</h3>
+      <p>客戶端定期送一個 HTTP GET 給 tracker（或用更輕量的 UDP tracker 協定，BEP 15）：</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>參數</th><th>意義</th></tr>
+          <tr><td><code>info_hash</code></td><td>20 bytes 原始 infohash，<b>逐位元組 URL 編碼</b>（不是 hex）</td></tr>
+          <tr><td><code>peer_id</code></td><td>20 bytes 客戶端識別碼，慣例是 Azureus 風格 <code>-qB4630-</code> + 亂數</td></tr>
+          <tr><td><code>port</code></td><td>我在哪個 port 接受其他 peer 連入（傳統上 6881–6889）</td></tr>
+          <tr><td><code>uploaded / downloaded / left</code></td><td>統計數字；<code>left=0</code> 代表我是種子（seeder）</td></tr>
+          <tr><td><code>event</code></td><td><code>started</code> / <code>completed</code> / <code>stopped</code></td></tr>
+          <tr><td><code>compact=1</code></td><td>要求精簡格式的 peer 清單（BEP 23）：每個 peer 6 bytes</td></tr>
+        </table>
+      </div>
+      <p>回應是 bencode 字典：<code>d8:intervali1800e5:peers12:&lt;6 bytes × 2&gt;e</code>。<code>interval</code> 是建議多久再 announce 一次（秒）。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 8a：組 announce 網址、解碼精簡 peer 清單</div>
+        <div class="controls">
+          <div class="control"><label for="annHash">infohash（hex，第 7 章做過 torrent 會自動帶入）</label><input type="text" id="annHash" value="c12fe1c06bba254a9dc9f519b335aa7c1367a88a"></div>
+          <div class="control"><label for="annLeft">left（還差多少 bytes）</label><input type="number" id="annLeft" value="1048576" min="0"></div>
+        </div>
+        <div class="bencode-out" id="annUrl"></div>
+        <h4>精簡 peer 清單（compact）</h4>
+        <div class="controls">
+          <div class="control" style="flex-basis:100%"><label for="compactHex">tracker 回傳的 peers 欄位（hex，每 6 bytes 一個 peer）</label>
+            <input type="text" id="compactHex" value="cb007107 1ae1 c6336414 1ae2 c0000201 c8d5"></div>
+        </div>
+        <div id="compactOut"></div>
+      </div>
+
+      <h3>Peer Wire Protocol</h3>
+      <p>連上 peer 的 TCP port 之後，雙方先交換 <b>handshake</b>：</p>
+      <pre class="code">&lt;pstrlen=19&gt;&lt;pstr="BitTorrent protocol"&gt;&lt;reserved: 8 bytes&gt;&lt;info_hash: 20&gt;&lt;peer_id: 20&gt;    共 68 bytes</pre>
+      <p>info_hash 不符就立刻斷線。reserved 的位元用來宣告支援哪些擴充（DHT、Fast Extension、Extension Protocol…）。之後每則訊息都是 <code>&lt;length: 4 bytes&gt;&lt;id: 1 byte&gt;&lt;payload&gt;</code>：</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th class="num">id</th><th>訊息</th><th>payload</th><th>用途</th></tr>
+          <tr><td class="num">—</td><td>keep-alive</td><td>（length = 0）</td><td>約每 2 分鐘送一次避免斷線</td></tr>
+          <tr><td class="num">0 / 1</td><td>choke / unchoke</td><td>—</td><td>「我不 / 我願意上傳給你」</td></tr>
+          <tr><td class="num">2 / 3</td><td>interested / not interested</td><td>—</td><td>「你有我想要的 piece」</td></tr>
+          <tr><td class="num">4</td><td>have</td><td>piece index</td><td>我剛驗證完一個 piece</td></tr>
+          <tr><td class="num">5</td><td>bitfield</td><td>每個 piece 1 bit</td><td>handshake 後告訴對方我有哪些 piece</td></tr>
+          <tr><td class="num">6</td><td>request</td><td>index, begin, length</td><td>請給我某 piece 從 begin 開始的 length（16 KiB）</td></tr>
+          <tr><td class="num">7</td><td>piece</td><td>index, begin, block</td><td>真正的資料</td></tr>
+          <tr><td class="num">8</td><td>cancel</td><td>index, begin, length</td><td>取消請求（endgame 模式用）</td></tr>
+          <tr><td class="num">9</td><td>port</td><td>DHT port</td><td>告訴對方我的 DHT UDP port</td></tr>
+        </table>
+      </div>
+      <p>每條連線兩端各有四個狀態位元：<code>am_choking</code>、<code>am_interested</code>、<code>peer_choking</code>、<code>peer_interested</code>。
+        初始都是「choked 且 not interested」。<b>只有在「我 interested」且「對方 unchoke 我」時才能下載</b>。為了填滿頻寬，客戶端會同時掛著多個 request（pipelining）。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 8b：訊息位元組檢視器</div>
+        <div class="controls">
+          <div class="control"><span class="label">訊息</span><select id="wireType"></select></div>
+          <div class="control" id="wireFields"></div>
+        </div>
+        <div class="hex" id="wireHex"></div>
+        <div class="hex-legend" id="wireLegend"></div>
+        <div class="hex-hover" id="wireHover">把滑鼠移到位元組上看說明</div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 8c：一段完整的 peer 對話</div>
+        <div class="btn-row">
+          <button class="btn" id="convPrev">◀ 上一步</button>
+          <button class="btn primary" id="convNext">下一步 ▶</button>
+          <span class="small-note" id="convCount"></span>
+        </div>
+        <div class="seq-wrap" id="convSvg" style="margin-top:10px"></div>
+        <div class="step-box" id="convDetail"></div>
+      </div>
+
+      <h3>後來的重要擴充</h3>
+      <ul>
+        <li><b>Extension Protocol（BEP 10）</b>：handshake 後交換 bencode 字典，協商額外訊息，例如 <b>ut_metadata</b>（BEP 9，磁力連結取得 info）與 <b>ut_pex</b>（BEP 11，Peer Exchange：直接向已連上的 peer 要更多 peer，減輕 tracker 負擔）。</li>
+        <li><b>uTP（BEP 29）</b>：跑在 UDP 上的傳輸協定，採用 LEDBAT 擁塞控制——偵測到延遲上升就主動讓路，下載 BT 時不再拖垮整個家用網路。UDP 也讓打洞變得可能（BEP 55 Holepunch extension 透過第三個 peer 協調）。</li>
+        <li><b>UPnP / NAT-PMP / PCP</b>：客戶端請家用路由器幫忙開 port，讓自己能被連入——比打洞更直接，但 CGNAT 下無效。</li>
+        <li><b>MSE / PE 加密</b>：用來躲避 ISP 的流量識別與限速，屬於<b>混淆</b>，不是對抗中間人的真正安全機制。</li>
+      </ul>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 精簡格式的 peer 清單中，每個 peer 佔幾個位元組？</p>
+          <ol class="opts"><li>4</li><li>6（4 bytes IPv4 + 2 bytes port）</li><li>20</li><li>26</li></ol>
+          <div class="explain">BEP 23。DHT 的精簡節點資訊則是 26 bytes（20 bytes node ID + 6 bytes 位址）。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>2. 你已經對 peer 送了 interested，什麼條件下才能開始送 request？</p>
+          <ol class="opts"><li>馬上就可以</li><li>對方送 have 之後</li><li>對方送 bitfield 之後</li><li>對方送 unchoke 之後</li></ol>
+          <div class="explain">對 choke 你的 peer 送 request 會被忽略。unchoke 由對方的 choking 演算法決定（第 9 章）。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. handshake 中 info_hash 的作用？</p>
+          <ol class="opts"><li>確認雙方在同一個 swarm，不同就斷線</li><li>加密後續流量</li><li>當作密碼</li><li>告訴 tracker 我在哪裡</li></ol>
+          <div class="explain">一個客戶端可能同時參與上百個 torrent，用 info_hash 決定這條連線屬於哪一個。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="swarm">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 9</span></div>
+      <h2>BitTorrent ③：Swarm 模擬器——rarest-first 與 tit-for-tat</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        BitTorrent 的效率來自兩個演算法：<b>piece 選擇</b>決定「要下載哪一塊」（rarest-first：先拿最少人有的），
+        <b>choking</b> 決定「要上傳給誰」（tit-for-tat：誰給我最多，我就給誰；外加 optimistic unchoke 給新人機會）。
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h4>🧩 Piece 選擇策略</h4>
+          <ul>
+            <li><b>Rarest first</b>：統計鄰居的 bitfield / have，優先下載副本最少的 piece。好處：稀有 piece 快速擴散，<b>原始種子離開後 swarm 仍然完整</b>；自己也更快變成「別人想要的人」。</li>
+            <li><b>Random first piece</b>：剛加入、手上什麼都沒有時，先隨便抓一塊<b>能最快完成</b>的，盡快有東西可以交換。</li>
+            <li><b>Strict priority</b>：已經開始下載的 piece 先把它下完（才能驗證並分享）。</li>
+            <li><b>Endgame mode</b>：最後幾個 block 同時向所有 peer 請求，誰先到就用誰的，再送 cancel 給其他人，避免卡在最後一個慢 peer。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>🤝 Choking 演算法</h4>
+          <ul>
+            <li>每個 peer 同時只 unchoke 少數幾個（經典設定 4 個）連線，避免頻寬被切得太碎。</li>
+            <li><b>Regular unchoke</b>：每 10 秒重新評估，unchoke「最近給我最快下載速度」的 3 個 peer——這就是 tit-for-tat（以牙還牙）。</li>
+            <li><b>Optimistic unchoke</b>：每 30 秒隨機挑 1 個 peer unchoke，讓新加入（還沒有東西可以回報）的人有機會開始，也用來探索更好的夥伴。</li>
+            <li><b>Seed</b> 沒有東西要下載，改為優先上傳給下載速度最快的 peer，或輪流分配。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 9：Swarm 模擬器</div>
+        <p class="small-note">第 0 列是原始種子（擁有全部 piece），其他列是下載者。每格代表一個 piece，填色表示已擁有。每個 peer 有不同的上傳能力（每回合可上傳的 piece 數），🆓 標記的是只下載不上傳的搭便車者。
+          每 3 回合重新 choke 一次，每 9 回合換一次 optimistic unchoke（對應真實的 10 秒 / 30 秒）。</p>
+        <div class="controls">
+          <div class="control"><label for="swN">下載者人數 <output for="swN"></output></label><input type="range" id="swN" min="4" max="40" step="1" value="20"></div>
+          <div class="control"><label for="swM">piece 數 <output for="swM"></output></label><input type="range" id="swM" min="16" max="120" step="4" value="60"></div>
+          <div class="control"><label for="swFree">搭便車者比例 <output for="swFree"></output></label><input type="range" id="swFree" min="0" max="0.5" step="0.05" value="0.2"></div>
+          <div class="control"><label for="swSpeed">速度 <output for="swSpeed"></output></label><input type="range" id="swSpeed" min="1" max="20" step="1" value="6"></div>
+        </div>
+        <div class="controls">
+          <div class="control"><span class="label">Piece 選擇</span>
+            <div class="seg" id="swPick"><button data-value="rarest" class="active">Rarest first</button><button data-value="random">隨機</button><button data-value="seq">循序（0, 1, 2…）</button></div>
+          </div>
+          <div class="control"><span class="label">上傳對象（choking）</span>
+            <div class="seg" id="swChoke"><button data-value="tft" class="active">Tit-for-tat + optimistic</button><button data-value="rand">隨機分配</button></div>
+          </div>
+          <div class="control"><span class="label">情境</span>
+            <div class="btn-row">
+              <label class="small-note"><input type="checkbox" id="swSeedLeave"> 原始種子上傳 1.5 份資料量後就離開</label>
+              <label class="small-note"><input type="checkbox" id="swStay" checked> 下載完的人留下做種</label>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="swPlay">▶ 播放</button>
+          <button class="btn" id="swStep">⏭ 單步</button>
+          <button class="btn" id="swReset">↺ 重設</button>
+          <button class="btn" id="swBatch">📊 批次比較所有策略</button>
+        </div>
+        <div class="metrics" id="swMetrics"></div>
+        <div class="canvas-box"><canvas id="swCanvas" style="height:400px"></canvas></div>
+        <div class="legend"><span style="--sw:var(--accent)">擁有的 piece</span><span style="--sw:var(--good)">本回合剛收到</span><span style="--sw:var(--c2)">下方長條：每個 piece 在 swarm 中的副本數</span><span style="--sw:var(--bad)">0 份</span></div>
+        <div id="swBatchOut"></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>先把搭便車者調成 0%，勾選「種子上傳 1.5 份後離開」，再按「批次比較」：<b>循序</b>策略下大家都搶前面的 piece，後面的 piece 只存在種子身上——種子一走，swarm 永遠卡住；<b>隨機</b>策略會重複拿到很多相同的 piece（集郵問題），也常卡住；<b>Rarest first</b> 讓種子送出的幾乎每一塊都不重複，所以撐得過去。</li>
+            <li>再把搭便車者調回 20%：送到搭便車者手上的 piece 等於消失了（他們不上傳），連 rarest first 也可能卡住。真實的 BitTorrent 用 <b>super-seeding</b> 模式讓種子確認每一塊都被轉傳出去才送下一塊。</li>
+            <li>觀察下方副本數長條：rarest first 讓長條保持平均；循序策略呈現「左高右低」的階梯。</li>
+            <li>比較 tit-for-tat 與隨機分配時，🆓 搭便車者的完成時間：tit-for-tat 下他們只能靠 optimistic unchoke 與種子，明顯較慢——這就是激勵機制。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. Rarest-first 最重要的效果是？</p>
+          <ol class="opts"><li>讓下載的檔案可以邊下邊看</li><li>降低 CPU 使用率</li><li>讓每個 piece 盡快擁有多個副本，原始種子離開後 swarm 仍可完成</li><li>減少 tracker 負擔</li></ol>
+          <div class="explain">循序下載有利於串流播放，但會讓尾端 piece 稀有；這是為什麼串流型客戶端要在兩者間折衷。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 如果沒有 optimistic unchoke，會發生什麼事？</p>
+          <ol class="opts"><li>剛加入、手上沒有任何 piece 的 peer 很難被任何人 unchoke，起步極慢</li><li>下載會更快</li><li>搭便車者會更快</li><li>種子無法上傳</li></ol>
+          <div class="explain">純 tit-for-tat 有「雞生蛋」問題：沒東西給人就沒人給你。optimistic unchoke 定期給隨機的人一次機會。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="dht">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 10</span></div>
+      <h2>BitTorrent ④：DHT 與 Kademlia——沒有 Tracker 也能找到人</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        Mainline DHT（BEP 5）把數百萬個 BitTorrent 客戶端組成一張巨大的分散式雜湊表。節點 ID 與 infohash 都是 <b>160 bits</b>，
+        「距離」定義為兩者的 <b>XOR</b>。誰的 ID 離 infohash 最近，誰就負責記住「誰在分享它」。每個節點只認識少量節點，但每一步都能讓距離至少減半，所以 <b>O(log N)</b> 步就能找到。
+      </div>
+
+      <h3>Kademlia 的三個核心概念</h3>
+      <ol>
+        <li><b>XOR 距離</b>：d(a, b) = a ⊕ b，當成整數比大小。它滿足 d(a,a)=0、對稱、三角不等式，而且<b>對任一點與距離，恰好只有一個點</b>——所以查詢會收斂到唯一的答案。</li>
+        <li><b>k-bucket 路由表</b>：第 i 個 bucket 存放距離在 [2<sup>i</sup>, 2<sup>i+1</sup>) 的節點，最多 k 個（BitTorrent 用 k = 8）。離你越遠的區域越大，但你只記 k 個——<b>近處認識得詳細，遠處認識得粗略</b>。舊的、還活著的節點優先保留（越久的節點越可能繼續在線）。</li>
+        <li><b>迭代查詢</b>：從路由表挑 α 個（通常 3）離目標最近的節點同時詢問，它們回傳自己認識的、更近的 k 個節點；重複直到找不到更近的。</li>
+      </ol>
+
+      <div class="card">
+        <div class="demo-title">實驗 10a：XOR 距離計算機（8-bit 版本）</div>
+        <div class="controls">
+          <div class="control"><label for="xorA">節點 ID a <output for="xorA"></output></label><input type="range" id="xorA" min="0" max="255" value="178"></div>
+          <div class="control"><label for="xorB">目標 b <output for="xorB"></output></label><input type="range" id="xorB" min="0" max="255" value="185"></div>
+        </div>
+        <pre class="code" id="xorOut"></pre>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 10b：Kademlia 路由表與查詢</div>
+        <p class="small-note">把 160-bit 縮小成 8-bit（0–255）來看。橫軸是 ID 空間，依二進位排列——<b>共享前綴越長的節點在線上越靠近</b>，所以每個 k-bucket 剛好是一段連續區間。
+          點畫布選擇「我的節點」；拖動滑桿選擇目標 infohash，按「開始查詢」逐輪觀察。</p>
+        <div class="controls">
+          <div class="control"><label for="dhtNodes">節點數 <output for="dhtNodes"></output></label><input type="range" id="dhtNodes" min="16" max="160" step="4" value="64"></div>
+          <div class="control"><label for="dhtK">k（每個 bucket 最多幾個）<output for="dhtK"></output></label><input type="range" id="dhtK" min="1" max="8" step="1" value="3"></div>
+          <div class="control"><label for="dhtAlpha">α（每輪同時詢問幾個）<output for="dhtAlpha"></output></label><input type="range" id="dhtAlpha" min="1" max="4" step="1" value="2"></div>
+          <div class="control"><label for="dhtTarget">目標 infohash <output for="dhtTarget"></output></label><input type="range" id="dhtTarget" min="0" max="255" step="1" value="200"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="dhtStart">▶ 開始查詢</button>
+          <button class="btn" id="dhtStepBtn">⏭ 下一輪</button>
+          <button class="btn" id="dhtNew">🎲 重新產生網路</button>
+        </div>
+        <div class="canvas-box" style="margin-top:10px"><canvas id="dhtCanvas" style="height:360px"></canvas></div>
+        <div class="metrics" id="dhtMetrics"></div>
+        <div class="grid-2">
+          <div><h4>我的路由表（k-buckets）</h4><div class="table-wrap"><table id="dhtTable"></table></div></div>
+          <div><h4>查詢候選清單（shortlist）</h4><div class="table-wrap"><table id="dhtShort"></table></div></div>
+        </div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>路由表中最大的 bucket（bucket 7）涵蓋一半的 ID 空間，卻也只記 k 個節點——但只要有一個，就能一步跳進目標所在的那一半。</li>
+            <li>把節點數調到 160，查詢輪數只會多一點點：每輪都至少多「對齊」一個位元，這就是 log N。</li>
+            <li>把 k 設成 1、α 設成 1：查詢仍然會成功（只要每個非空 bucket 至少有一個活節點），只是容錯能力很差。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>BitTorrent DHT 的四種 KRPC 訊息（bencode over UDP）</h3>
+      <pre class="code"><span class="c"># 查詢：誰有這個 infohash 的 peer？</span>
+{"t":"aa", "y":"q", "q":"<span class="k">get_peers</span>", "a":{"id":"&lt;我的 node id&gt;", "info_hash":"&lt;20 bytes&gt;"}}
+<span class="c"># 回應 A：我知道！給你 peer（每個 6 bytes），外加一個 token</span>
+{"t":"aa", "y":"r", "r":{"id":"…", "token":"aoeusnth", "values":["&lt;6 bytes&gt;", …]}}
+<span class="c"># 回應 B：我不知道，但這些節點離它更近（每個 26 bytes = id + ip + port）</span>
+{"t":"aa", "y":"r", "r":{"id":"…", "token":"aoeusnth", "nodes":"&lt;26 bytes × k&gt;"}}
+
+<span class="c"># 查完之後，向「最近的那幾個節點」登記自己也在分享（需附上剛拿到的 token）</span>
+{"t":"bb", "y":"q", "q":"<span class="k">announce_peer</span>", "a":{"id":"…", "info_hash":"…", "port":6881, "token":"aoeusnth"}}
+
+<span class="c"># 另外兩種：ping（檢查存活）、find_node（找離某個 ID 最近的節點，用來建立路由表）</span></pre>
+      <p><b>token</b> 是回應者用「詢問者 IP + 秘密值」算出的短效值，防止有人替別的 IP 亂登記。新節點加入時要先連到<b>引導節點</b>（例如 <code>router.bittorrent.com:6881</code>），
+        對自己的 ID 做一次 find_node，順便把沿途遇到的節點填進路由表。</p>
+
+      <div class="box pitfall"><span class="box-title">⚠️ DHT 的弱點</span>
+        <ul>
+          <li><b>Sybil 攻擊</b>：攻擊者自己產生大量節點 ID，擠到某個 infohash 附近，就能控制對它的查詢結果（<b>Eclipse 攻擊</b>）。BEP 42 要求節點 ID 的前幾個位元由 IP 推導，提高成本。</li>
+          <li><b>隱私</b>：DHT 是公開的，任何人都可以爬取並記錄誰在分享什麼——研究人員與版權監控公司都這麼做。</li>
+        </ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. ID 0b1011_0010（178）與 0b1011_1001（185）的 XOR 距離是？</p>
+          <ol class="opts"><li>7</li><li>11</li><li>185</li><li>3</li></ol>
+          <div class="explain">10110010 ⊕ 10111001 = 00001011 = 11。共享前綴「1011」，所以它們落在彼此的第 3 號 bucket（距離 8–15）。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>2. 為什麼 Kademlia 查詢的步數是 O(log N)？</p>
+          <ol class="opts"><li>因為使用 UDP</li><li>因為有 tracker 幫忙</li><li>因為每個節點認識所有其他節點</li><li>每一步都能跳到「與目標多共享至少一個前綴位元」的節點，距離至少減半</li></ol>
+          <div class="explain">路由表對每個前綴長度都有聯絡人，所以每跳都能修正最高位的那個不同位元。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>3. 用磁力連結下載時，客戶端最先需要做的是？</p>
+          <ol class="opts"><li>從 tracker 下載 .torrent</li><li>向任意 peer 送 request</li><li>用 DHT 的 get_peers 找到擁有這個 infohash 的 peer，再用 ut_metadata 取得 info 字典</li><li>計算檔案的 SHA-1</li></ol>
+          <div class="explain">磁力連結只有 infohash；info 字典（piece 雜湊等）要從 peer 那裡拿，並用 infohash 驗證。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="did">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 11</span></div>
+      <h2>身分：從 peer_id 到 DID（去中心化識別碼）</h2>
+
+      <div class="box tldr"><span class="box-title">一句話重點</span>
+        前面的章節解決了「資料可不可信」（piece 雜湊），但沒解決「<b>對方是不是他說的那個人</b>」。
+        <b>DID</b>（Decentralized Identifier，W3C 標準）讓身分變成<b>自我驗證</b>的：名字由公鑰推導出來，只有持有私鑰的人能證明「我就是這個名字」，不需要任何中央機構發帳號。
+        把它和前面學的東西接起來：用 DID 簽章就能擋住第 4 章的信令伺服器中間人攻擊；用第 10 章的 Mainline DHT 就能發佈與查詢 DID。
+      </div>
+
+      <h3>P2P 裡的身分問題</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>前面學過的東西</th><th>它的身分從哪來</th><th>問題</th></tr>
+          <tr><td>BitTorrent <code>peer_id</code>（第 8 章）</td><td>自己隨便取的 20 bytes</td><td>任何人都能宣稱任何 peer_id，沒有意義</td></tr>
+          <tr><td>DHT node ID（第 10 章）</td><td>自己選的 160 bits 亂數</td><td>可以刻意挑 ID 擠到目標附近（Sybil / Eclipse 攻擊）</td></tr>
+          <tr><td>WebRTC <code>a=fingerprint</code>（第 4、5 章）</td><td>每次連線臨時產生的自簽憑證</td><td>指紋由信令伺服器轉交，伺服器可以偷換 → 中間人攻擊</td></tr>
+          <tr><td>PairDrop 配對（第 4 章）</td><td>6 位數配對碼換到的共享秘密</td><td>只決定「誰能進同一個房間」，不驗證 DTLS 連線的另一端是誰</td></tr>
+          <tr><td>email、手機號碼、社群帳號</td><td>由公司或電信商核發</td><td>中心化：帳號可被停權、被收回、被冒用</td></tr>
+        </table>
+      </div>
+      <p>第 7 章的 <b>infohash</b> 其實已經示範了解法的精神：<b>名字就是內容的雜湊</b>，所以不需要相信任何人，自己算一次就能驗證。這叫做<b>自我驗證識別碼（self-certifying identifier）</b>。
+        把同樣的想法用在「人」或「裝置」身上：<b>名字就是公鑰</b>（或公鑰的雜湊），證明身分的方式是用私鑰簽章——這就是 DID 的核心。</p>
+      <div class="flow">
+        <div class="node">infohash<small>= SHA-1(info) → 驗證<b>內容</b></small></div><span class="arrow">≈</span>
+        <div class="node hi">did:key<small>= 公鑰本身 → 驗證<b>身分</b></small></div><span class="arrow">≈</span>
+        <div class="node">libp2p PeerId<small>= 公鑰的雜湊（IPFS 的 DHT 直接拿它當 node ID）</small></div>
+      </div>
+
+      <h3>DID 長什麼樣子</h3>
+      <pre class="code"><span class="k">did</span>:<span class="s">key</span>:<span class="c">z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK</span>
+ │    │    └─ 方法自訂的識別碼（did:key 的話就是編碼過的公鑰）
+ │    └────── DID 方法（method）：決定「怎麼建立、怎麼查詢、怎麼更新」
+ └─────────── 固定前綴</pre>
+      <p>任何 DID 都可以<b>解析（resolve）</b>成一份 <b>DID Document</b>（JSON），裡面列出：</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>欄位</th><th>意義</th><th>對應 P2P 的用途</th></tr>
+          <tr><td><code>verificationMethod</code></td><td>公鑰清單（例如 Ed25519 的 <code>Multikey</code>）</td><td>驗證簽章</td></tr>
+          <tr><td><code>authentication</code></td><td>哪些金鑰可以「證明我就是這個 DID」</td><td>連線時的身分驗證（例如簽 DTLS 指紋）</td></tr>
+          <tr><td><code>assertionMethod</code></td><td>哪些金鑰可以簽發聲明（Verifiable Credential）</td><td>簽發「這個檔案是我發佈的」</td></tr>
+          <tr><td><code>keyAgreement</code></td><td>哪些金鑰可以拿來協商加密金鑰（例如 X25519）</td><td>端對端加密（DIDComm）</td></tr>
+          <tr><td><code>service</code></td><td>服務端點：「要找我，請到這裡」</td><td>告訴別人我的信令伺服器 / 收件匣在哪 → <b>發現</b></td></tr>
+        </table>
+      </div>
+
+      <h3>DID 方法：身分文件存在哪裡？</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>方法</th><th>文件存在哪</th><th>能更新 / 換金鑰？</th><th>特色</th></tr>
+          <tr><td><code>did:key</code></td><td>哪裡都不存：文件直接由公鑰<b>推導</b>出來</td><td>❌ 不能（換金鑰 = 換身分）</td><td>最簡單、完全離線、適合短期或測試</td></tr>
+          <tr><td><code>did:peer</code></td><td>只存在通訊雙方之間，不公開</td><td>可以（在雙方間傳遞更新）</td><td>每段關係用不同 DID（pairwise），避免被關聯追蹤；最接近「配對」的概念</td></tr>
+          <tr><td><code>did:web</code></td><td><code>https://網域/.well-known/did.json</code></td><td>✅</td><td>好部署，但信任建立在 DNS 與 HTTPS，網域被收回身分就沒了</td></tr>
+          <tr><td><code>did:dht</code></td><td><b>BitTorrent 的 Mainline DHT</b>（BEP 44 可變資料）</td><td>✅（識別碼本身的金鑰不能換）</td><td>不需要區塊鏈、不需要自己的伺服器；直接用第 10 章那張數百萬節點的 DHT</td></tr>
+          <tr><td><code>did:plc</code></td><td>中央目錄伺服器，但每次修改都是簽章過的操作紀錄</td><td>✅（有專門的 rotation key）</td><td>Bluesky / AT Protocol 使用；可被稽核但仍有中心</td></tr>
+          <tr><td><code>did:ion</code>、<code>did:ethr</code>…</td><td>區塊鏈（加上 IPFS 等）</td><td>✅</td><td>全球一致的排序，代價是成本與延遲</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="demo-title">實驗 11a：在瀏覽器裡產生一個真的 did:key</div>
+        <p class="small-note">用 WebCrypto 產生 Ed25519 金鑰對（私鑰不可匯出，不會離開這個分頁）。編碼規則：<code>did:key:</code> + <code>z</code>（multibase 前綴，代表 base58btc）+ base58btc( <code>0xed 0x01</code>（multicodec「ed25519-pub」的 varint）+ 32 bytes 公鑰 )。
+          開頭的 <code>0xed01</code> 經過 base58 之後剛好變成 <code>6Mk</code>，所以所有 Ed25519 的 did:key 都以 <code>z6Mk</code> 開頭。</p>
+        <div class="btn-row"><button class="btn primary" id="didGen">🔑 產生新的 Ed25519 金鑰與 DID</button><span class="small-note" id="didSupport"></span></div>
+        <div id="didGenOut" style="margin-top:10px"></div>
+        <div class="hex" id="didHex"></div>
+        <div class="hex-legend" id="didLegend"></div>
+        <div class="hex-hover" id="didHover"></div>
+        <h4>解析（resolve）任意一個 did:key</h4>
+        <div class="controls"><div class="control" style="flex-basis:100%"><input type="text" id="didResolveIn" value="did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"></div></div>
+        <div id="didResolveOut"></div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>解析 did:key <b>完全不需要網路</b>：DID Document 是從字串本身「算」出來的。這也是它的缺點——金鑰外洩或遺失時，沒有任何地方可以宣告「這個身分作廢了」。</li>
+            <li>把輸入框中 DID 的<b>最後一個字元</b>改掉：解析竟然仍然「成功」，只是得到<b>另一把完全不同的公鑰</b>。base58 沒有校驗碼，打錯一個字就變成別人——所以 DID 應該用 QR code 或複製貼上傳遞，不要手抄。改掉開頭的 <code>z6Mk</code> 或刪掉幾個字元，才會因為標頭或長度不符而失敗。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>用 DID 擋下信令伺服器的中間人攻擊</h3>
+      <p>回想第 4 章：WebRTC 的 DTLS 加密很強，但「對方的憑證指紋」是信令伺服器轉交的。惡意伺服器只要把雙方的指紋都換成自己的，就能同時和兩邊各建立一條加密連線，在中間解密、偷看、轉送。</p>
+      <p>解法：如果 Alice 和 Bob <b>事先</b>知道彼此的 DID（例如面對面掃 QR code 配對一次），之後每次連線時，各自用 DID 私鑰對自己的 DTLS 指紋<b>簽章</b>，放進信令訊息。
+        伺服器可以照樣轉送，但它<b>沒有 Alice 的私鑰</b>，換掉指紋就生不出有效的簽章。</p>
+      <div class="card">
+        <div class="demo-title">實驗 11b：中間人攻擊 vs DID 簽章（真實金鑰與真實 DTLS 憑證）</div>
+        <p class="small-note">這裡用 <code>RTCPeerConnection.generateCertificate()</code> 產生 Alice、Bob、Mallory 三張真的 DTLS 憑證，用 WebCrypto Ed25519 做真的簽章與驗證。
+          假設 Bob 在之前的配對中已經記住 Alice 的 DID。</p>
+        <div class="controls">
+          <div class="control"><span class="label">信令伺服器</span>
+            <div class="seg" id="mitmServer"><button data-value="honest">😇 誠實</button><button data-value="evil" class="active">😈 被 Mallory 控制</button></div>
+          </div>
+          <div class="control"><span class="label">Mallory 的手法</span>
+            <div class="seg" id="mitmTrick"><button data-value="swap" class="active">只換掉指紋</button><button data-value="resign">換指紋，並用自己的 DID 重新簽章</button></div>
+          </div>
+          <div class="control"><span class="label">Bob 的驗證方式</span>
+            <div class="seg" id="mitmDid"><button data-value="none">只信任 SDP（一般 WebRTC）</button><button data-value="did" class="active">要求 DID 簽章</button></div>
+          </div>
+        </div>
+        <div class="btn-row"><button class="btn primary" id="mitmRun">▶ 執行一次連線</button></div>
+        <div class="seq-wrap" id="mitmSvg" style="margin-top:10px"></div>
+        <div class="pkt-log" id="mitmLog" style="margin-top:10px"></div>
+        <div class="result-banner idle" id="mitmResult">按「執行一次連線」。</div>
+        <div class="box tryit"><span class="box-title">動手觀察</span>
+          <ul>
+            <li>「被 Mallory 控制」＋「只信任 SDP」：DTLS 照樣「成功」，雙方都看到加密連線已建立，卻完全不知道中間有人。</li>
+            <li>換成「要求 DID 簽章」：Mallory 換掉指紋後，Alice 的簽章對不上新指紋 → Bob 拒絕。</li>
+            <li>Mallory 改用自己的 DID 重新簽章：簽章本身是有效的，但<b>簽章者不是 Bob 記住的那個 DID</b> → 一樣被拒絕。所以真正的信任根源是<b>第一次交換 DID 的那個管道</b>（掃 QR code、面對面比對）——跟 SSH 的 known_hosts、Signal 的安全碼是同一個道理。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>did:dht：用 BitTorrent 的 DHT 存身分文件</h3>
+      <p>did:key 不能更新；did:web 依賴網域。<code>did:dht</code> 走了一條很 P2P 的路：把簽章過的 DID Document 直接存進第 10 章的 <b>Mainline DHT</b>。它用的是 <b>BEP 44</b>（在 DHT 中存放任意資料）裡的「可變資料（mutable item）」：</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>BEP 44 欄位</th><th>內容</th></tr>
+          <tr><td><code>k</code></td><td>32 bytes 的 Ed25519 公鑰——資料的「主人」</td></tr>
+          <tr><td>target（存放位置）</td><td><b>SHA-1(k)</b>（有 salt 時為 SHA-1(k + salt)）。跟 infohash 一樣是 160 bits，所以存在 XOR 距離最近的那幾個節點上</td></tr>
+          <tr><td><code>v</code></td><td>內容，bencode 後最多 1000 bytes</td></tr>
+          <tr><td><code>seq</code></td><td>版本號，越大越新；節點會拒絕比手上舊的版本（防重放）</td></tr>
+          <tr><td><code>sig</code></td><td>Ed25519 簽章，簽的是 <code>3:seqi&lt;seq&gt;e1:v&lt;長度&gt;:&lt;v&gt;</code> 這段 bencode 片段</td></tr>
+        </table>
+      </div>
+      <p>did:dht 的識別碼就是公鑰的 <b>z-base-32</b> 編碼（52 個字元），DID Document 被壓縮成一個 <b>DNS 封包</b>（一組 TXT 記錄）放進 <code>v</code>。
+        因為 <code>k</code> 就藏在 DID 裡，任何人拿到 DID 就能算出 target、向 DHT 查詢、並驗證簽章——<b>DHT 節點本身完全不需要被信任</b>。
+        DHT 中的資料大約幾小時就會被節點丟棄，所以擁有者（或任何熱心節點）要定期重新發佈；瀏覽器因為不能用 UDP，要透過 HTTP 中繼（Pkarr relay）存取——跟 WebTorrent 用 WebSocket tracker 的道理一樣。</p>
+
+      <div class="card">
+        <div class="demo-title">實驗 11c：發佈並解析一個 did:dht（BEP 44 模擬）</div>
+        <p class="small-note">金鑰、簽章、SHA-1 都是真的；DHT 網路是本機模擬的 40 個 160-bit 節點。TXT 記錄依 did:dht 規格簡化，實際規格會把它們編成二進位 DNS 封包。</p>
+        <div class="btn-row">
+          <button class="btn primary" id="dhtDidPublish">① 發佈（put）</button>
+          <button class="btn" id="dhtDidResolve">② 從另一個節點解析（get）</button>
+          <button class="btn" id="dhtDidUpdate">③ 更新文件：加一個 service（seq + 1）</button>
+          <button class="btn" id="dhtDidTamper">😈 惡意節點竄改內容</button>
+          <button class="btn" id="dhtDidReplay">😈 重放舊版本</button>
+        </div>
+        <div id="dhtDidOut" style="margin-top:10px"></div>
+        <div class="pkt-log" id="dhtDidLog" style="margin-top:10px"></div>
+      </div>
+
+      <h3>DID 在整個 P2P 拼圖中的位置</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>四個問題</th><th>DID 能幫什麼</th></tr>
+          <tr><td>🔍 發現</td><td>DID Document 的 <code>service</code> 告訴別人「到哪裡找我」（信令伺服器、收件匣、relay）；did:dht 讓這份資訊本身也去中心化</td></tr>
+          <tr><td>🔌 連線</td><td>幫不上忙——NAT 穿透還是 ICE 的事</td></tr>
+          <tr><td>📦 傳輸</td><td>DIDComm 定義了以 DID 定址、端對端加密的訊息格式，可以跑在 WebSocket、WebRTC 或任何傳輸上</td></tr>
+          <tr><td>🛡️ 信任</td><td><b>主要貢獻</b>：把「相信伺服器」變成「相信數學 + 第一次配對」；簽章讓資料與身分綁定，換伺服器也不影響</td></tr>
+        </table>
+      </div>
+
+      <div class="box pitfall"><span class="box-title">⚠️ 常見誤解</span>
+        <ul>
+          <li><b>「有 DID 就知道對方是真人 / 是誰」</b>——不會。DID 只證明「對方持有某把私鑰」。要證明「這把鑰匙屬於某公司、某個成年人」，需要可信的第三方簽發 <b>Verifiable Credential（可驗證憑證）</b>給這個 DID。</li>
+          <li><b>「DID 能防 Sybil 攻擊」</b>——不能。產生 DID 是免費的，攻擊者一樣能產生一百萬個。DID 解決的是<b>冒充</b>，不是<b>洗身分數量</b>。</li>
+          <li><b>「DID 一定要用區塊鏈」</b>——不需要。did:key、did:peer 完全不上網；did:dht 用的是 BitTorrent 的 DHT；did:web 用的是一般網站。</li>
+          <li><b>「私鑰掉了可以找客服」</b>——沒有客服。did:key 遺失私鑰就永遠失去這個身分；能更新的方法（did:plc、did:dht 等）也必須事先準備好復原機制。</li>
+        </ul>
+      </div>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 小測驗</div>
+        <div class="q" data-answer="2">
+          <p>1. 為什麼所有 Ed25519 的 did:key 都以 <code>z6Mk</code> 開頭？</p>
+          <ol class="opts"><li>這是 W3C 隨機指定的</li><li>z 代表 zero-knowledge</li><li><code>z</code> 是 base58btc 的 multibase 前綴，而固定的 multicodec 標頭 <code>0xed01</code> 經過 base58 編碼後總是落在 <code>6Mk</code></li><li>因為公鑰的前幾個位元組都一樣</li></ol>
+          <div class="explain">固定的前置位元組在 base58 編碼中會決定開頭字元，就像 Bitcoin 位址以 1 或 3 開頭。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>2. 惡意信令伺服器換掉了 Alice 的 DTLS 指紋，並用<b>它自己的</b> DID 對新指紋做了有效簽章。Bob 為什麼仍然能發現？</p>
+          <ol class="opts"><li>Bob 檢查簽章者是不是他事先記住的 Alice 的 DID，發現不是</li><li>Ed25519 簽章無法偽造任何內容</li><li>DTLS 會自動偵測</li><li>Bob 無法發現</li></ol>
+          <div class="explain">簽章只證明「某把私鑰簽了這段資料」。安全性來自「Bob 期待的是哪一把」，所以第一次交換 DID 的管道要可信。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>3. did:dht 的文件存在不可信的 DHT 節點上，為什麼解析結果還是可信的？</p>
+          <ol class="opts"><li>DHT 節點都經過審核</li><li>Mainline DHT 有加密</li><li>只存在 tracker 上</li><li>DID 本身就包含公鑰，解析者用它驗證 BEP 44 的簽章；節點竄改內容或重放舊版都會被發現</li></ol>
+          <div class="explain">和 infohash 一樣，信任錨點在識別碼本身。節點能做的最壞事情是「不回應」（可用其他節點補救），而不是「說謊」。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <section class="chapter" id="summary">
+      <div class="chapter-head"><span class="chapter-num">CHAPTER 12</span></div>
+      <h2>總結：兩個世界的交會——WebTorrent</h2>
+
+      <p>BitTorrent 與 WebRTC 看似兩條平行線，<b>WebTorrent</b> 把它們接了起來：它是一個用 JavaScript 寫的 BitTorrent 客戶端，在瀏覽器裡用 <b>WebRTC DataChannel</b> 取代 TCP/uTP 來跑 Peer Wire Protocol。
+        瀏覽器不能開 TCP port、也不能用 UDP 跑 DHT，所以 WebTorrent 用 <b>WebSocket tracker</b>（<code>wss://</code>）：
+        你 announce 時順便附上幾個 WebRTC offer，tracker 把它們轉給同一個 infohash 的其他 peer，對方的 answer 也經 tracker 傳回——<b>tracker 同時扮演「發現」與「信令伺服器」</b>，就像 PairDrop 的 WebSocket 伺服器一樣。
+        桌面版 WebTorrent 與部分 BitTorrent 客戶端同時支援 TCP/uTP 與 WebRTC，成為兩個網路之間的橋樑。</p>
+
+      <div class="flow">
+        <div class="node">磁力連結<small>infohash</small></div><span class="arrow">→</span>
+        <div class="node hi">WebSocket tracker<small>發現 + 轉送 offer / answer</small></div><span class="arrow">→</span>
+        <div class="node hi">ICE / DTLS<small>打洞或 TURN</small></div><span class="arrow">→</span>
+        <div class="node hi">DataChannel 上的 Peer Wire<small>handshake / bitfield / request / piece</small></div><span class="arrow">→</span>
+        <div class="node">SHA-1 驗證 piece</div>
+      </div>
+
+      <h3>全景比較</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>系統</th><th>發現</th><th>信令 / 建立連線</th><th>傳輸</th><th>NAT 穿透</th><th>資料完整性</th></tr>
+          <tr><td>Napster</td><td>中央索引</td><td>直接 TCP</td><td>TCP</td><td>幾乎沒有（一方需可連入）</td><td>無</td></tr>
+          <tr><td>Gnutella</td><td>洪泛查詢</td><td>直接 TCP</td><td>HTTP over TCP</td><td>PUSH 請求（反向連線）</td><td>弱</td></tr>
+          <tr><td>BitTorrent</td><td>Tracker / DHT / PEX</td><td>直接 TCP 或 uTP</td><td>Peer Wire</td><td>UPnP、NAT-PMP、uTP 打洞</td><td>每個 piece SHA-1 / SHA-256</td></tr>
+          <tr><td>PairDrop / Snapdrop</td><td>WebSocket 伺服器（同 IP / 配對 / 房間）</td><td>同一台伺服器轉送 SDP / ICE</td><td>WebRTC DataChannel</td><td>ICE（STUN + TURN）</td><td>DTLS + SCTP 可靠傳輸</td></tr>
+          <tr><td>ShareDrop</td><td>Firebase（同 IP 房間 / 自訂房間）</td><td>Firebase 即時資料庫</td><td>WebRTC DataChannel</td><td>ICE（STUN + TURN）</td><td>DTLS + SCTP 可靠傳輸</td></tr>
+          <tr><td>WebTorrent</td><td>WebSocket tracker、（桌面版）DHT</td><td>WebSocket tracker 轉送 offer / answer</td><td>Peer Wire over DataChannel</td><td>ICE</td><td>piece SHA-1</td></tr>
+        </table>
+      </div>
+
+      <h3>隱私與安全對照</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>議題</th><th>瀏覽器 P2P（WebRTC）</th><th>BitTorrent</th></tr>
+          <tr><td>IP 暴露</td><td>對方與信令伺服器看得到你的公網 IP；區網 IP 以 mDNS 隱藏</td><td>swarm 與 DHT 中任何人都看得到你的 IP 與你在分享什麼</td></tr>
+          <tr><td>加密</td><td>強制 DTLS，但要信任信令伺服器傳來的 fingerprint</td><td>預設不加密；MSE/PE 只是混淆</td></tr>
+          <tr><td>資料正確性</td><td>靠傳輸層可靠性，沒有內容雜湊（應用可自行加）</td><td>每個 piece 都有雜湊，可對抗惡意 peer</td></tr>
+          <tr><td>中心依賴</td><td>信令伺服器、STUN / TURN</td><td>tracker 可有可無（DHT），只需引導節點</td></tr>
+        </table>
+      </div>
+
+      <div class="box recap"><span class="box-title">📌 全課程回顧</span>
+        <ul>
+          <li><b>P2P 會自我擴展</b>：總上傳能力隨使用者增加，前提是大家願意上傳。</li>
+          <li><b>NAT</b> 的映射與過濾行為決定能否打洞；對稱型 NAT 是頭號殺手，需要 <b>TURN</b>。</li>
+          <li><b>ICE</b> 收集 host / srflx / relay 候選、依公式排序、逐一檢查，選出最好的一條。</li>
+          <li><b>信令</b>不屬於 WebRTC：PairDrop 用 WebSocket、ShareDrop 用 Firebase，都以「同公網 IP」分房，各有 CGNAT / IPv6 的陷阱。</li>
+          <li><b>DataChannel</b> = SCTP / DTLS / UDP；大檔案要切塊並做背壓。</li>
+          <li><b>BitTorrent</b>：infohash = SHA-1(bencode(info))；Tracker 或 DHT 找 peer；Peer Wire 交換 piece；rarest-first + tit-for-tat 讓 swarm 高效又公平。</li>
+          <li><b>Kademlia</b>：XOR 距離 + k-bucket，O(log N) 步找到負責節點。</li>
+          <li><b>DID</b>：名字由公鑰推導、用私鑰簽章證明身分；DID 簽章讓信令伺服器無法偷換指紋，did:dht 用 BEP 44 把身分文件存進 Mainline DHT。</li>
+        </ul>
+      </div>
+
+      <h3>術語表</h3>
+      <dl class="glossary">
+        <dt>Peer / Swarm</dt><dd>參與者 / 分享同一個 infohash 的所有參與者。</dd>
+        <dt>Seeder / Leecher</dt><dd>擁有完整檔案的上傳者 / 還在下載的人。</dd>
+        <dt>NAT</dt><dd>網路位址轉換，讓多台裝置共用一個公網 IP，並預設阻擋未經請求的連入封包。</dd>
+        <dt>CGNAT</dt><dd>電信商級 NAT，使用 100.64.0.0/10，讓大量用戶共用公網 IP。</dd>
+        <dt>Hole punching</dt><dd>雙方同時向對方的公網位址送封包，讓各自的 NAT 建立允許對方進入的規則。</dd>
+        <dt>STUN</dt><dd>讓客戶端得知自己公網位址的簡單協定（RFC 8489）。</dd>
+        <dt>TURN</dt><dd>打洞失敗時中繼所有流量的伺服器（RFC 8656）。</dd>
+        <dt>ICE</dt><dd>收集、配對、檢查候選位址並選出最佳路徑的框架（RFC 8445）。</dd>
+        <dt>SDP</dt><dd>描述連線參數的文字格式，WebRTC 用 offer / answer 交換。</dd>
+        <dt>Signaling（信令）</dt><dd>在 P2P 連線建立前交換 SDP 與候選的管道，由應用自行實作。</dd>
+        <dt>DTLS / SCTP</dt><dd>UDP 上的 TLS / 可靠的多串流訊息傳輸，兩者疊起來就是 DataChannel。</dd>
+        <dt>Backpressure（背壓）</dt><dd>依接收或傳送佇列的狀態暫停送出，避免佇列爆滿。</dd>
+        <dt>bencode</dt><dd>BitTorrent 的序列化格式，有整數、字串、串列、字典四種型別。</dd>
+        <dt>infohash</dt><dd>info 字典 bencode 後的 SHA-1（v2 為 SHA-256），一份內容的唯一識別。</dd>
+        <dt>Piece / Block</dt><dd>驗證單位 / 傳輸單位（16 KiB）。</dd>
+        <dt>Choke / Unchoke</dt><dd>拒絕 / 允許上傳給某個 peer。</dd>
+        <dt>Tit-for-tat</dt><dd>優先上傳給上傳給我最多的人。</dd>
+        <dt>DHT / Kademlia</dt><dd>分散式雜湊表 / 以 XOR 距離組織的 DHT 演算法。</dd>
+        <dt>k-bucket</dt><dd>Kademlia 路由表中，存放某一段距離範圍內最多 k 個節點的清單。</dd>
+        <dt>PEX</dt><dd>Peer Exchange，peer 之間直接交換其他 peer 的位址。</dd>
+        <dt>DID</dt><dd>去中心化識別碼，<code>did:方法:識別碼</code>，可解析成列出公鑰與服務端點的 DID Document。</dd>
+        <dt>Self-certifying ID</dt><dd>自我驗證識別碼：名字本身就是公鑰或內容的雜湊（did:key、infohash、libp2p PeerId）。</dd>
+        <dt>BEP 44</dt><dd>在 Mainline DHT 中存放任意資料；可變資料以 Ed25519 公鑰為主人、以 seq 為版本、需簽章。</dd>
+        <dt>Verifiable Credential</dt><dd>第三方對某個 DID 簽發的可驗證聲明，例如「此 DID 屬於某公司」。</dd>
+      </dl>
+
+      <div class="quiz">
+        <div class="quiz-title">✏️ 期末綜合測驗</div>
+        <div class="q" data-answer="1">
+          <p>1. 你用 PairDrop 從家裡電腦傳檔給在 4G 網路上的手機（已配對），手機在對稱型 NAT 後面、電腦在一般家用路由器後面。最可能的資料路徑是？</p>
+          <ol class="opts"><li>直接打洞成功，完全 P2P</li><li>經過 TURN 伺服器中繼</li><li>經過 STUN 伺服器中繼</li><li>經過 Firebase</li></ol>
+          <div class="explain">對稱型 ↔ 埠限制錐形無法打洞（第 2 章的表），ICE 只能選 relay 候選。STUN 從不中繼資料。</div>
+        </div>
+        <div class="q" data-answer="3">
+          <p>2. 下列關於 infohash 的敘述何者<b>錯誤</b>？</p>
+          <ol class="opts"><li>它是 info 字典的 SHA-1</li><li>磁力連結裡最重要的就是它</li><li>它也是 DHT 中的查詢鍵</li><li>更換 tracker 會改變它</li></ol>
+          <div class="explain">tracker 在 info 字典之外，不影響 infohash。</div>
+        </div>
+        <div class="q" data-answer="0">
+          <p>3. WebTorrent 在瀏覽器中為什麼需要 WebSocket tracker，而不是傳統的 UDP tracker 與 DHT？</p>
+          <ol class="opts"><li>瀏覽器不能直接收發任意 UDP / TCP，且 WebRTC 需要信令來交換 offer / answer</li><li>WebSocket 比 UDP 快</li><li>為了加密</li><li>因為 DHT 不支援 JavaScript</li></ol>
+          <div class="explain">瀏覽器的網路 API 只有 HTTP、WebSocket、WebRTC 等。WebSocket tracker 同時解決發現與信令。</div>
+        </div>
+        <div class="q" data-answer="2">
+          <p>4. 哪一項設計是 BitTorrent 用來對付「只下載不上傳」的搭便車行為？</p>
+          <ol class="opts"><li>SHA-1 piece 雜湊</li><li>Rarest first</li><li>Tit-for-tat choking</li><li>bencode</li></ol>
+          <div class="explain">雜湊對付的是惡意資料；rarest first 對付的是 piece 稀有；tit-for-tat 才是激勵機制。</div>
+        </div>
+        <div class="q" data-answer="1">
+          <p>5. 想讓 PairDrop 類的應用「就算信令伺服器被入侵，也不會被中間人攻擊」，最根本的做法是？</p>
+          <ol class="opts"><li>改用 Firebase</li><li>配對時交換雙方的 DID，之後每次連線都用 DID 私鑰簽 DTLS 指紋並驗證</li><li>改用 TURN</li><li>把 chunk 加大</li></ol>
+          <div class="explain">信任錨點從「伺服器」移到「配對時交換的公鑰」，伺服器只剩轉送功能，換掉內容就會被簽章驗證抓到。</div>
+        </div>
+      </div>
+
+      <h3>延伸閱讀（規格與原始文件）</h3>
+      <ul class="refs">
+        <li>Bram Cohen (2003). <a href="https://bittorrent.org/bittorrentecon.pdf" target="_blank" rel="noopener">Incentives Build Robustness in BitTorrent</a></li>
+        <li><a href="https://www.bittorrent.org/beps/bep_0003.html" target="_blank" rel="noopener">BEP 3：The BitTorrent Protocol Specification</a>・
+          <a href="https://www.bittorrent.org/beps/bep_0005.html" target="_blank" rel="noopener">BEP 5：DHT Protocol</a>・
+          <a href="https://www.bittorrent.org/beps/bep_0009.html" target="_blank" rel="noopener">BEP 9：Metadata</a>・
+          <a href="https://www.bittorrent.org/beps/bep_0023.html" target="_blank" rel="noopener">BEP 23：Compact Peer Lists</a>・
+          <a href="https://www.bittorrent.org/beps/bep_0052.html" target="_blank" rel="noopener">BEP 52：BitTorrent v2</a></li>
+        <li>Maymounkov &amp; Mazières (2002). <a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf" target="_blank" rel="noopener">Kademlia: A Peer-to-peer Information System Based on the XOR Metric</a></li>
+        <li>RFC <a href="https://www.rfc-editor.org/rfc/rfc4787" target="_blank" rel="noopener">4787</a>（NAT 行為）・
+          <a href="https://www.rfc-editor.org/rfc/rfc8489" target="_blank" rel="noopener">8489</a>（STUN）・
+          <a href="https://www.rfc-editor.org/rfc/rfc8656" target="_blank" rel="noopener">8656</a>（TURN）・
+          <a href="https://www.rfc-editor.org/rfc/rfc8445" target="_blank" rel="noopener">8445</a>（ICE）・
+          <a href="https://www.rfc-editor.org/rfc/rfc8831" target="_blank" rel="noopener">8831</a>（DataChannel）</li>
+        <li>W3C <a href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">Decentralized Identifiers (DIDs) v1.0</a>・
+          <a href="https://w3c-ccg.github.io/did-key-spec/" target="_blank" rel="noopener">did:key Method</a>・
+          <a href="https://tbd54566975.github.io/did-dht-method/" target="_blank" rel="noopener">DID DHT Method</a>・
+          <a href="https://www.bittorrent.org/beps/bep_0044.html" target="_blank" rel="noopener">BEP 44：Storing arbitrary data in the DHT</a>・
+          <a href="https://github.com/pubky/pkarr" target="_blank" rel="noopener">Pkarr</a></li>
+        <li>Ford, Srisuresh, Kegel (2005). <a href="https://bford.info/pub/net/p2pnat/" target="_blank" rel="noopener">Peer-to-Peer Communication Across Network Address Translators</a></li>
+        <li>原始碼：<a href="https://github.com/schlagmichdoch/PairDrop" target="_blank" rel="noopener">PairDrop</a>・
+          <a href="https://github.com/szimek/sharedrop" target="_blank" rel="noopener">ShareDrop</a>・
+          <a href="https://github.com/webtorrent/webtorrent" target="_blank" rel="noopener">WebTorrent</a></li>
+      </ul>
+    </section>
+
+  </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/nat.js"></script>
+<script src="js/ice.js"></script>
+<script src="js/signal.js"></script>
+<script src="js/webrtc.js"></script>
+<script src="js/lab.js"></script>
+<script src="js/torrent.js"></script>
+<script src="js/wire.js"></script>
+<script src="js/swarm.js"></script>
+<script src="js/dht.js"></script>
+<script src="js/did.js"></script>
+</body>
+</html>
